@@ -1,4 +1,4 @@
-# SWOTFlow Lite v0.1.1 — setup and workflow
+# SWOTFlow Lite v0.2.0 — setup and workflow
 
 ## First installation
 
@@ -32,11 +32,19 @@ Use a **new empty collection for a new Lite project**. To extend an existing col
 ## Project and plan
 
 1. New project: choose a separate data folder; all downloaded, extracted, mosaic, log and history paths are created under it.
-2. Select UTM tiles, full acquisition date range, GDAL Python, Cloud project, bucket and EE ImageCollection ID. Native 100 m exact UTM grids are fixed in this release.
+2. Select UTM tiles, full acquisition date range, GDAL Python, Cloud project, bucket and EE ImageCollection ID. Use the comma-separated tile field, **Select on map…**, or check multiple continents and **Add checked continents**. **Use only checked continents** explicitly replaces the list. Native 100 m exact UTM grids are fixed in this release.
 3. Process: select Prepare locally or Fully automatic. Set complete-mosaic/source-byte batch targets, disk reserve and prepared-mosaic limit. Download network batches are a separate setting.
 4. Authenticate NASA in the launch console. Credentials are not saved by Lite.
 5. Catalogue / plan queries both official NASA catalogues and records every candidate and preferred-version selection. Review the expected batches. Refresh the plan when extending dates/tiles or reconciling publication changes.
 6. Start / Resume reuses recorded work. Stop after current stage retains checkpoints; sudden shutdown also retains completed receipts. Changing workers/cleanup is supported on Resume; source/scientific/destination changes are not silently accepted.
+
+## Selecting your tiles
+
+The map opens from Project and works offline. Click a tile to toggle it; use the wheel or Zoom buttons, right-drag to pan, and Fit selection to frame the chosen grids. Country boundaries/names and tile labels can be toggled. Labels appear as you zoom in. **Add zone** selects all available latitude-band tiles in a numbered UTM zone, with North, South or Both hemispheres. Latitude-band letters are not hemisphere suffixes: for example, UTM36S is a northern tile.
+
+Select several continent checkboxes before adding them. Overlapping presets are deduplicated. The checkboxes choose which presets to add; the tile field/map shows the actual selection, which can then be adjusted manually. Apply selection commits map edits to the field; Cancel discards them. Save settings persists the list. Open/New resets the preset checkboxes without changing the saved tile list.
+
+The map is a longitude/latitude reference view, covering the UTM range from 80°S to 84°N. Country boundaries are low-resolution Natural Earth references, not authoritative administrative limits. Blue indicates selected scope only. A preset includes intersecting grid cells and may include areas without NASA acquisitions. Refresh **Catalogue / plan** after changing scope. Existing project history is retained, and active workers keep their original frozen settings. Selection does not change extraction, mosaicking, metadata, cleanup or Statistics rules.
 
 ## Fully automatic route
 

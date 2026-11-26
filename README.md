@@ -1,4 +1,4 @@
-# SWOTFlow Lite v0.1.1
+# SWOTFlow Lite v0.2.0
 
 A separate, four-tab desktop application for native 100 m SWOT processing and ordinary Earth Engine ingestion through Google Cloud Storage. GeeUp remains a separate application.
 
@@ -14,7 +14,7 @@ NASA catalogue snapshots, preferred-version selection, downloaded filenames, sou
 1. Use approved **64-bit Python 3.11 or 3.12** (including 3.12.10) with Tkinter, and your separate GDAL/NetCDF environment. The app and GDAL Python versions do not need to match.
 2. Run `Setup_SWOTFlow_Lite.ps1` from PowerShell. Respect your organisation's software/network policies.
 3. Open `Start_SWOTFlow_Lite.cmd`. Keep its console available for NASA sign-in.
-4. Create a **new Lite project outside the application folder**, set UTM tiles, dates, GDAL Python and Cloud destination.
+4. Create a **new Lite project outside the application folder**, set UTM tiles, dates, GDAL Python and Cloud destination. Select tiles on the offline map, type their names, or combine continent presets.
 5. Use **Authenticate NASA**, **Catalogue / plan**, then **Start / Resume**. Review the plan before a large run.
 
 Setup preserves an existing supported `.venv`. For a fresh installation it tries Python 3.12, then 3.11 through the Windows launcher, then `python` on PATH. To choose explicitly, run `./Setup_SWOTFlow_Lite.ps1 -PythonPath 'C:\path\to\Python312\python.exe'`. Add `-CheckOnly` to check compatibility without installing anything. Do not copy another computer's `.venv`; create it on the destination computer.
@@ -34,7 +34,13 @@ Defaults are targets of 50 complete mosaics and 2 GiB of original-source bytes p
 
 Manual imports make a server-side copy into an app-owned revision path before ingestion. There is **no second local upload**, but briefly two bucket copies and an extra copy operation. The manual original is deleted only after EE verification and owned-copy cleanup. Browser uploads are outside the app's automatic storage cap. Keep batches small and import while uploads continue.
 
-## Scope of v0.1.0
+## Tile selection
+
+In **Project**, check several continents and choose **Add checked continents** to combine them with the current tiles, or **Use only checked continents** to replace the list. Shared tiles appear once. **Select on map…** lets you fine-tune that same list by clicking tiles, zooming and panning, with country boundaries/names for reference. You can also add a whole UTM zone for either or both hemispheres. Apply commits the map selection; Cancel leaves it unchanged.
+
+The offline map uses the existing bundled UTM grid and continent presets, plus public-domain Natural Earth country outlines. Blue means selected scope, not successful processing or NASA coverage. Presets include all intersecting grid tiles; **Catalogue / plan** checks available acquisitions. Reopen the same project and refresh its plan after adding tiles/dates; retained histories and completed work remain available. See [reference sources](spatial_presets/README.md).
+
+## Processing scope
 
 The simplified UI supports native 100 m **exact UTM tiles** and deterministic lowest-quality-code mosaicking. It does not expose browser automation, reprojection or cross-zone EE consolidation. Compatibility modules remain internally to preserve tested science/history contracts; Lite never starts ChromeDriver.
 

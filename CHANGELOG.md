@@ -1,5 +1,14 @@
 # Release history
 
+## v0.2.0 — 26 November 2026
+
+- Add an offline Project tile map with clickable UTM grids, zoom/pan, fit selection, country boundaries/names and tile labels.
+- Combine multiple continent presets, preserving manual additions unless replacement is explicitly selected. Shared tiles are included once.
+- Add whole-zone selection by northern/southern/both hemispheres; retain direct tile-name entry. All controls use the same saved project tile list.
+- Keep active workflow settings frozen, preserve project history and require catalogue replanning for changed scope. Scientific processing, metadata, cleanup, Resume and Statistics contracts remain unchanged.
+- Bundle public-domain Natural Earth reference boundaries with pinned source attribution; no browser, map service, extra dependency or network access is required to select tiles.
+- Validation: 825 tests passed and five existing environment/opt-in skips; 16 focused map/project tests passed, with desktop visual checks of individual tiles and the combined Africa/Europe selection.
+
 ## v0.1.1 — 26 November 2026
 
 - Support 64-bit Python 3.12, including 3.12.10, alongside Python 3.11 in the Windows setup script.

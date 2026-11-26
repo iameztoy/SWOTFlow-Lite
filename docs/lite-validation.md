@@ -46,6 +46,16 @@ An initial pilot used separate project histories in one collection. Cleanup corr
 
 ## Remaining validation
 
+### v0.2.0 selection interface
+
+Full application suite on Python 3.11: **825 passed, five existing environment/opt-in skips** (830 total). No dependency or scientific-processing change was introduced.
+
+The offline map was visually inspected with individual African tiles and the combined Africa/Europe selection (154 unique tiles). Focused regressions cover continent unions and explicit replacement, manual extras, Cancel/Apply, hemisphere selection, Norway/Svalbard special grid boundaries, country label coordinates, pan/zoom and aspect-fit margins. Project tests confirm that selection edits preserve histories and scientific/Cloud settings and cannot change an active worker's scope. All 16 focused tests passed. The app continues to use the existing catalogue plan and full-scope Statistics; the map represents selection, not ingestion coverage.
+
+No new NASA downloads, Cloud transfers or EE asset changes are needed for map validation. Reference geometry and all preset tiles are bundled, so the selector works offline. The setup guide and app keep Python 3.11/3.12 support.
+
+### Operational checks
+
 - Test approved network/proxy access on the workplace computer.
 - Compare practical transfer concurrency and inspect actual Cloud billing before large volumes.
 - Increase geographic/time coverage gradually; keep periodic independent source and EE checks.

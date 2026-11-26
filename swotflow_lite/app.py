@@ -16,6 +16,7 @@ from swotflow.project.model import save_project
 from swotflow.processing.download import normalize_utm_tiles, authenticate
 from swotflow_lite import __version__
 from swotflow_lite import project as model, planner, runner, statistics
+from swotflow_lite.tile_selection import ContinentPicker, TileMapDialog, combine_continents
 
 
 class LiteApp:
@@ -60,20 +61,50 @@ class LiteApp:
         self.button(actions,"New project",self.new); self.button(actions,"Open project",self.open)
         self.button(actions,"Save settings",self.save)
         self.entry("Project",1,"tiles","UTM tiles (comma separated)","UTM35L")
-        self.entry("Project",2,"start","First acquisition date (YYYY-MM-DD)")
-        self.entry("Project",3,"end","Last acquisition date (YYYY-MM-DD)")
-        self.entry("Project",4,"gdal","GDAL Python executable")
-        ttk.Button(f,text="Browse GDAL Python",command=self.choose_gdal).grid(row=5,column=1,sticky="w")
+        tools=ttk.Frame(f); tools.grid(row=2,column=0,columnspan=2,sticky="w",pady=6)
+        self.button(tools,"Select on map…",self.select_map)
+        self.button(tools,"Clear tiles",lambda:self.set_tiles([]))
+        self.tile_count=tk.StringVar(value="1 tile selected")
+        ttk.Label(tools,textvariable=self.tile_count).pack(side="left")
+        self.vars["tiles"].trace_add("write",lambda *args:self.update_tile_count())
+        self.continents=ContinentPicker(f,self.select_continents,self.buttons)
+        self.continents.grid(row=3,column=0,columnspan=2,sticky="ew",pady=6)
+        ttk.Label(f,text="Add combines checked continents with your tiles. Use only replaces the list. You can then adjust tiles on the map or above. "
+                  "After changing scope, run Catalogue / plan before Start / Resume; existing history is retained.",
+                  wraplength=950).grid(row=4,column=0,columnspan=2,sticky="w",pady=(4,10))
+        self.entry("Project",5,"start","First acquisition date (YYYY-MM-DD)")
+        self.entry("Project",6,"end","Last acquisition date (YYYY-MM-DD)")
+        self.entry("Project",7,"gdal","GDAL Python executable")
+        ttk.Button(f,text="Browse GDAL Python",command=self.choose_gdal).grid(row=8,column=1,sticky="w")
         ttk.Label(f,text="Native 100 m, exact UTM tiles. Lowest quality code selects the paired elevation/quality; deterministic ties. "
-                  "Preferred NASA versions and full filename history are retained. This first Lite release has no browser uploader or cross-zone consolidation UI.",
-                  wraplength=950).grid(row=6,column=0,columnspan=2,sticky="w",pady=18)
-        self.entry("Project",7,"destination","EE ImageCollection ID")
-        self.entry("Project",8,"cloud_project","Google Cloud project ID")
-        self.entry("Project",9,"bucket","Bucket name (without gs://)")
+                  "Preferred NASA versions and full filename history are retained. Map boundaries are for selection only; the processing grid stays unchanged.",
+                  wraplength=950).grid(row=9,column=0,columnspan=2,sticky="w",pady=18)
+        self.entry("Project",10,"destination","EE ImageCollection ID")
+        self.entry("Project",11,"cloud_project","Google Cloud project ID")
+        self.entry("Project",12,"bucket","Bucket name (without gs://)")
         ttk.Label(f,text="Use a new empty EE collection for a new Lite project. To add tiles or dates to an existing collection, "
                   "reopen its original project and history. Keep automatic and manual upload routes in that same project. "
                   "Assets without recorded source history prevent safe local cleanup.",
-                  wraplength=950).grid(row=10,column=0,columnspan=2,sticky="w",pady=12)
+                  wraplength=950).grid(row=13,column=0,columnspan=2,sticky="w",pady=12)
+
+    def update_tile_count(self) -> None:
+        try:self.tile_count.set(f"{len(normalize_utm_tiles(self.vars['tiles'].get()))} tiles selected")
+        except ValueError:self.tile_count.set("Check tile names (example: UTM35L)")
+
+    def set_tiles(self, tiles) -> None:
+        if self.busy:return
+        self.vars["tiles"].set(", ".join(normalize_utm_tiles(tiles)))
+        self.status.set("Tile selection changed. Save settings, then refresh Catalogue / plan before processing the new scope.")
+
+    def select_continents(self, names, replace=False) -> None:
+        if self.busy:return
+        try:self.set_tiles(combine_continents(self.vars["tiles"].get(),names,replace=replace))
+        except ValueError as exc:messagebox.showerror("Continent selection",str(exc),parent=self.root)
+
+    def select_map(self) -> None:
+        if self.busy:return
+        try:TileMapDialog(self.root,normalize_utm_tiles(self.vars["tiles"].get()),self.set_tiles)
+        except (ValueError,OSError) as exc:messagebox.showerror("Tile map",str(exc),parent=self.root)
 
     def _process_tab(self) -> None:
         """Expose bounded processing and existing worker controls."""
@@ -161,6 +192,7 @@ class LiteApp:
             "download_threads":c["download"]["threads"],"download_batch":c["download"]["batch_size"],"extract_workers":c["extract"]["workers"],"mosaic_workers":c["mosaic"]["workers"]}
         values.update({k:l[k] for k in ("batch_mosaics","batch_source_gib","max_prepared_gib","min_free_gib")})
         for k,v in values.items():self.vars[k].set(str(v))
+        self.continents.reset()
         self.vars["manual_plan"].set(""); self.mode.set(l["mode"])
         self.intermediate.set(l["cleanup_intermediates"]);self.mosaic_cleanup.set(l["cleanup_mosaics"])
         self.cloud_cleanup.set(cloud.get("delete_after_verification",True))
