@@ -1,0 +1,401 @@
+# Copy this file to config.yaml and edit the values for your machine.
+#
+# The GUI can also create/open SWOTFlow projects. A project writes the same config
+# shape into <project_root>/project.yaml and repoints the processing folders to
+# that project root, while config.yaml remains the active session mirror.
+
+earth_engine_url: "https://code.earthengine.google.com/"
+
+# Local folder that contains the GeoTIFF files to upload. By default this is
+# the mosaic output folder, so the Upload tab can receive Mosaic outputs.
+input_folder: "C:/path/to/SWOT_Processing/03_mosaics"
+
+# Earth Engine parent path. Each uploaded file becomes:
+#   projects/MY_PROJECT/assets/MY_COLLECTION/<generated_asset_name>
+# If the Earth Engine dialog uses a separate "destination collection" field,
+# this same value is sent there.
+destination_parent: "projects/MY_PROJECT/assets/MY_COLLECTION"
+
+processing:
+  # Default local processing root. These folders are not committed to Git and
+  # can be changed in the GUI/config if your data lives elsewhere.
+  root: "C:/path/to/SWOT_Processing"
+  # Authoritative indexed project state. CSV reports remain compatibility
+  # exports, but processing history and resume decisions use this database.
+  database: "C:/path/to/SWOT_Processing/swotflow.sqlite3"
+  raw_downloads: "C:/path/to/SWOT_Processing/01_raw_downloads"
+  extracted_geotiffs: "C:/path/to/SWOT_Processing/02_extracted_geotiffs"
+  mosaics: "C:/path/to/SWOT_Processing/03_mosaics"
+  logs: "C:/path/to/SWOT_Processing/00_logs"
+
+download:
+  # First pipeline step: search and download PO.DAAC SWOT L2 HR Raster 100 m
+  # NetCDF granules through NASA Earthdata / earthaccess.
+  collection_short_name: "SWOT_L2_HR_Raster_100m_D"
+  collection_version_label: "Version D active"
+
+  # Downloaded NetCDF files should land in the raw-download folder so the next
+  # tabs can remove duplicate versions and extract GeoTIFFs without extra setup.
+  output_folder: "C:/path/to/SWOT_Processing/01_raw_downloads"
+
+  # Required search window. Use YYYY-MM-DD.
+  start_date: ""
+  end_date: ""
+
+  # One or more UTM/MGRS tile tokens from the SWOT filename, e.g. UTM30R.
+  utm_tiles: []
+
+  # Optional safety cap for testing. Leave null to retrieve all matches.
+  # This limits the preview/search result itself, so use it only for tests.
+  max_granules: null
+
+  # Product-version handling after the remote search:
+  # - best: list all remote matches but download only the best CRID/product
+  #   counter for each SWOT observation.
+  # - all: download every matching remote file.
+  product_version_filter: best
+
+  # Verified mode: complete dual-catalogue Version D search, mandatory history,
+  # exact NASA byte count/checksum. Old manifest flags alone cannot skip downloads.
+  # Narrow dates/tiles for pilots; max_granules must be blank and filter = best.
+  verified_downloads: true
+  # Persistent filename/version history (mandatory when verified mode is enabled).
+  # This writes nasa_catalog_history.sqlite3 beside manifest_csv; never credentials.
+  catalog_history_enabled: true
+
+  # Preview and final download status report.
+  report_csv: "C:/path/to/SWOT_Processing/00_logs/download_preview.csv"
+
+  # Readable compatibility export of granules already downloaded. The SQLite
+  # project database is the authoritative memory used to skip previously
+  # completed granules even if raw NetCDF files are deleted after processing.
+  manifest_csv: "C:/path/to/SWOT_Processing/00_logs/download_manifest.csv"
+
+  # Existing local files with the same expected filename are skipped.
+  skip_existing: true
+
+  # Granules already marked downloaded in the project records are skipped, even
+  # when the raw NetCDF file is no longer present.
+  skip_manifest_existing: true
+
+  # earthaccess parallel workers per batch.
+  threads: 10
+
+  # Number of granules submitted to earthaccess.download at once. Set to 1 for
+  # the old one-file-at-a-time behavior; new projects use 50 per batch.
+  batch_size: 50
+
+  # Safety timeout for each CMR metadata page request. In Automation, a tile
+  # whose remote search stalls can fail cleanly and be retried later instead of
+  # blocking the whole queue indefinitely.
+  search_request_timeout_seconds: 60
+
+duplicates:
+  # First pipeline step: manually downloaded SWOT NetCDF files go here.
+  input_folder: "C:/path/to/SWOT_Processing/01_raw_downloads"
+
+  # Older duplicate versions move into this subfolder inside the selected
+  # input folder. The newest _NN version stays in place.
+  moved_folder_name: "moved"
+
+  # Timestamped duplicate-removal text logs are written here.
+  log_folder: "C:/path/to/SWOT_Processing/00_logs"
+
+  # Default false to match the original duplicate-cleanup script behavior.
+  recursive: false
+
+  # Optional automation-only UTM scope. Leave empty for normal manual runs.
+  utm_tiles: []
+
+extract:
+  # Second pipeline step: cleaned raw SWOT NetCDF files are read from here.
+  input_folder: "C:/path/to/SWOT_Processing/01_raw_downloads"
+
+  # One two-band GeoTIFF per input NetCDF is written here.
+  output_folder: "C:/path/to/SWOT_Processing/02_extracted_geotiffs"
+
+  # Matches the notebook options: original, africa_laea, or wgs84.
+  target_crs_mode: "original"
+
+  # Use "all", one year like 2025, or comma-separated years like "2024,2025".
+  year_selection: "all"
+
+  # Optional test limit. Leave null for all selected files.
+  limit_files: null
+
+  # If true, existing valid GeoTIFFs are reopened and skipped.
+  skip_existing: true
+  skip_manifest_existing: true
+
+  # Matches the notebook default used for reprojection.
+  resampling_alg: "near"
+
+  # Use 1 for the original one-by-one behavior. Increase cautiously for parallel extraction.
+  workers: 4
+
+  # Optional automation-only UTM scope. Leave empty for normal manual runs.
+  utm_tiles: []
+
+  # Readable exports written from the indexed project records.
+  manifest_csv: "C:/path/to/SWOT_Processing/00_logs/extract_manifest.csv"
+  errors_csv: "C:/path/to/SWOT_Processing/00_logs/extract_errors.csv"
+
+gdal:
+  # Python executable from the Miniforge/conda GDAL environment.
+  # SWOTFlow uses this runtime for NetCDF extraction and mosaic processing.
+  python: "./.conda/swot_gdal/python.exe"
+
+mosaic:
+  # Local folder containing the original SWOT GeoTIFF tiles to mosaic.
+  # The Extraction tab writes GeoTIFFs here by default.
+  input_folder: "C:/path/to/SWOT_Processing/02_extracted_geotiffs"
+
+  # Output folder for upload-ready mosaic GeoTIFFs.
+  output_folder: "C:/path/to/SWOT_Processing/03_mosaics"
+
+  # utm_zone: original projection; keep exact UTM token in the grouping key.
+  # utm_zone_hemisphere: original projection; group MGRS latitude bands that
+  # share the same UTM zone and hemisphere, e.g. UTM30P/UTM30Q/UTM30R -> UTM30N.
+  # pass_date_common_crs: reprojected outputs; mosaic whole pass/date and ignore
+  # original UTM token after GDAL compatibility validation.
+  grouping_mode: "utm_zone"
+
+  # Optional label used in common-CRS mosaic output names, for example LAEA or
+  # WGS84. Blank uses COMMON.
+  target_crs_label: ""
+
+  # Set true if you want to scan subfolders too.
+  recursive: false
+
+  # If false, existing output mosaics are reported and left unchanged.
+  overwrite: false
+
+  # Write a .tfw world file beside each mosaic GeoTIFF. The GeoTIFF itself also
+  # keeps embedded georeferencing.
+  write_world_file: true
+
+  # Use 1 for the original one-by-one behavior. Increase cautiously because mosaics are disk/RAM intensive.
+  workers: 4
+
+  # Optional automation-only UTM scope. Leave empty for normal manual runs.
+  utm_tiles: []
+
+  # File extensions to include in mosaic planning.
+  extensions:
+    - ".tif"
+    - ".tiff"
+
+  # Readable exports written from the indexed project records.
+  report_csv: "C:/path/to/SWOT_Processing/00_logs/mosaic_report.csv"
+  manifest_csv: "C:/path/to/SWOT_Processing/00_logs/mosaic_manifest.csv"
+  skip_manifest_existing: true
+
+  # Focused CSV with only mosaic groups that combine different source CRIDs.
+  # Leave blank to disable this extra report.
+  mixed_crid_report_csv: "C:/path/to/SWOT_Processing/00_logs/mixed_crid_mosaics.csv"
+
+chrome:
+  # Dedicated Chrome profile folder for this tool.
+  # Chrome will keep your Earth Engine login state here.
+  user_data_dir: "./chrome-profile"
+
+  # Leave null to let Chrome use the default profile inside user_data_dir.
+  profile_directory: null
+
+  # Usually leave null. Set this only if Selenium cannot find Chrome.
+  binary_location: null
+
+  # Recommended default. "attach" starts a normal Chrome window with a debugging
+  # port and Selenium attaches to it. This is more reliable for Google sign-in
+  # than launching a fully Selenium-managed browser for the login flow.
+  connection_mode: "attach"
+
+  # Debugging port used when connection_mode is "attach".
+  remote_debugging_port: 9222
+
+  # Headed mode is recommended. Set true only if you know you want headless.
+  headless: false
+  start_maximized: true
+
+upload:
+  backend: "browser"  # browser or gcs; Cloud Upload uses the same metadata and history.
+  batch_size: 50
+  max_active_ingestions: 0  # No additional app cap; browser transfers remain limited below.
+  # Maximum clicked files that may remain in Chrome before an Earth Engine
+  # ingestion operation appears. Keep this small on slow or unstable links.
+  max_pending_browser_uploads: 3
+
+  # all: upload every GeoTIFF in the origin folder.
+  # selected_utm: upload only files whose output UTM tile or mosaic source
+  # tiles intersect upload.utm_tiles.
+  scope: "all"
+  utm_tiles: []
+
+  # Before planning uploads, list existing assets in destination_parent with
+  # ee.data.listAssets and mark matches as EE_VERIFIED_EXISTS in the report.
+  ee_sync_before_upload: true
+  ee_asset_inventory_page_size: 1000
+
+  # Asset naming:
+  # final_name = prefix + sanitized(file_stem) + suffix
+  prefix: ""
+  suffix: ""
+
+  # Optional exact text replacements before regex cleanup.
+  replacement_rules:
+    " ": "_"
+
+  # Replace characters that do not match this pattern.
+  invalid_char_pattern: "[^A-Za-z0-9._-]+"
+  invalid_char_replacement: "_"
+
+  # Set true if you want to scan subfolders too.
+  recursive: false
+
+  # File extensions to include.
+  extensions:
+    - ".tif"
+    - ".tiff"
+
+  pyramiding_policy:
+    # Leave null to keep Earth Engine's default.
+    default: null
+
+    # The browser upload dialog supports one policy for every band.
+    # Per-band entries are accepted only when identical; differing policies
+    # require a separate API/manifest ingestion workflow.
+    # Example (paired sampled elevation/quality pyramids):
+    # per_band:
+    #   b1: "SAMPLE"
+    #   b2: "SAMPLE"
+    per_band: {}
+
+  retry_attempts: 1  # Automation retains two additional recovery rounds.
+  retry_wait_seconds: 1.0
+  # Maximum time to wait for a matching Earth Engine task after clicking
+  # UPLOAD when no browser transfer progress is visible.
+  submission_confirmation_timeout_seconds: 30
+  # Hard ceiling for an actively progressing browser-side file transfer.
+  submission_transfer_timeout_minutes: 30
+  # wait_for_ee waits for submitted Earth Engine tasks before continuing.
+  # submit_and_continue moves on after browser submission and verifies/cleans later.
+  completion_mode: submit_and_continue
+
+  # If true, stop the whole run after the first failed upload.
+  fail_fast: false
+
+metadata:
+  # Enabled by default for SWOT L2 HR Raster filenames.
+  enabled: true
+  parser: "swot_l2_hr_raster"
+
+  # If true, a file that does not match the expected SWOT filename pattern
+  # is treated as an upload error. Set false to upload unmatched files without
+  # metadata properties.
+  require_match: true
+
+  # system:time_start is populated from RangeBeginningDateTime.
+  add_start_time: true
+
+  # system:time_end is populated from RangeEndingDateTime.
+  add_end_time: true
+
+  # Map Earth Engine property names to parsed filename fields.
+  # Values are stored as strings so leading zeros are preserved.
+  extra_properties:
+    swot_descriptor: descriptor
+    swot_grid_resolution: grid_resolution
+    swot_coordinate_system: coordinate_system
+    swot_granule_overlap: granule_overlap
+    swot_cycle_id: cycle_id
+    swot_pass_id: pass_id
+    swot_scene_id: scene_id
+    swot_crid: crid
+    swot_product_counter: product_counter
+
+execution:
+  # Set true to plan uploads without clicking the final UPLOAD button.
+  dry_run: true
+
+  # Reuse SQLite upload history. EE sync verifies assets and active operations;
+  # stale provisional submissions without remote proof can be retried.
+  resume: true
+
+  # Ask for confirmation before a real upload. The GUI confirms in its window;
+  # direct CLI runs ask for YES unless --yes is passed. Automation is preapproved.
+  require_confirmation: true
+
+  # How often to re-check the Tasks panel.
+  task_poll_seconds: 20
+
+  # Small UI fallback wait used after clicks and panel switches.
+  short_ui_wait_seconds: 1.5
+
+  # Maximum wait for task monitoring before the script gives up and exits.
+  wait_timeout_minutes: 720
+
+  # Selenium page-load timeout for opening/reloading Earth Engine. If the page is
+  # visible after this timeout, SWOTFlow checks for usable controls and continues.
+  page_load_timeout_seconds: 90
+
+  # True = show debug-level logging in the console as well as the log file.
+  verbose_console: true
+
+artifacts:
+  logs_dir: "C:/path/to/SWOT_Processing/00_logs"
+  artifacts_dir: "C:/path/to/SWOT_Processing/00_logs/upload_artifacts"
+  # Readable exports written from the indexed project records.
+  report_csv: "C:/path/to/SWOT_Processing/00_logs/upload_report.csv"
+  ee_asset_inventory_csv: "C:/path/to/SWOT_Processing/00_logs/ee_asset_inventory.csv"
+
+automation:
+  # Unattended tile-by-tile workflow settings used by the Automation tab.
+  # Manual workflow tabs remain available and share the same project database.
+  # In the GUI, use "Copy Download Date Range" when automation should match the
+  # manual Download tab's temporal window.
+  utm_tiles: []
+  start_date: ""
+  end_date: ""
+  include_upload: true
+  cleanup_enabled: true
+  # New-project default: finish each tile in clipped calendar years before
+  # moving to the next tile. Disable to process its whole selected date range.
+  # Cleanup must be enabled and verified to release disk space.
+  process_by_year: true
+  min_free_space_gb: 50
+  continue_on_tile_failure: true
+  # Retry CMR/download-search timeout failures after the first tile pass. This
+  # helps unattended runs recover when CMR or the local network is temporarily
+  # slow while the computer is idle.
+  deferred_download_retry_passes: 1
+  # Windows only: ask the OS not to enter automatic sleep while Automation is
+  # running. This does not prevent manual shutdown, forced restart, power loss,
+  # or all vendor/network-adapter power-saving behavior.
+  prevent_system_sleep: true
+  # Begin the workflow immediately when preflight succeeds. Leave false when
+  # you want to review the queue before starting.
+  auto_start_after_preflight: false
+  # Search NASA again to discover late/reprocessed products. False uses saved
+  # expected matches where available and cannot discover newly published files.
+  refresh_cmr: true
+
+# Mosaic removal is a separate editable choice, enabled for new projects.
+# Legacy configs without this section retain their prior strict cleanup behavior.
+# confirmed_ingestion requires current EE revision + local hash/source provenance.
+# Both policies retain pending/failed files; ingestion proof does not certify pixels.
+cleanup:
+  mosaics_enabled: true  # Independent of raw/extracted cleanup; proof still required.
+  mosaic_policy: confirmed_ingestion  # confirmed_ingestion | full_pixels
+
+# Optional Cloud Upload. Create your private Standard bucket and configure ADC
+# first; see docs/cloud-upload-setup.md. No bucket/resource is created by the app.
+cloud_upload:
+  project: ""
+  bucket: ""
+  prefix: "swotflow-staging"
+  staging_limit_gib: 50
+  delete_after_verification: true
+  chunk_mib: 16
+  # Independent of upload.max_active_ingestions; existing projects default to 1.
+  # Increase gradually up to 8 if upload bandwidth and the staging cap allow it.
+  concurrent_uploads: 1

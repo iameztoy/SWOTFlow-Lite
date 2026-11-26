@@ -1,0 +1,106 @@
+# Workflow verification and rebuild gates — v0.8.18
+
+Do not start a continent-wide rebuild solely because the application version has changed. Start a separate project with a small, explicit acquisition scope. Keep the old project as historical evidence. Collection deletion is an operator action, not an application upgrade or an automatic repair.
+
+## Implemented safeguards
+
+- **Download → Verified downloads** (also in Statistics → NASA History) queries the union of the Version D parent and 100 m catalogues, restricted to requested 100 m filenames, dates and grids. Complete page accounting is mandatory; failed, limited or unverified searches cannot start verified transfers. Conflicting checksums for catalogue aliases stop the operation.
+- Every returned filename/version remains in the catalogue ledger, including aliases and lower-priority versions with selection reasons. Download only the preferred CRID/product counter according to the existing priority rules. “All available” means preferred observations within the chosen scope, not every superseded copy.
+- Selected files require the exact NASA byte count and checksum. Same-size corruption fails verification. Failed files remain pending; a subsequent attempt quarantines an invalid local copy before transferring again. Verification receipts persist in `00_logs/download_verification.sqlite3` after raw cleanup. Each new run and each transfer verifies the bytes again. An in-memory cache avoids duplicate reads of unchanged files within that run; persisted receipts never bypass a fresh run's checksum check.
+- Verified mode does not accept historical download-success flags as proof that a current raw file is present. Missing raw files are downloaded again unless a complete preferred-input group has current checksum-linked full-pixel EE evidence or confirmed ingestion bound to its exact local revision and source history. A new group member or revised source forces affected-group rebuilding. Metadata-only historical checks remain the efficient way to find newer versions.
+- Local mosaics select **both** WSE and quality from the lowest valid quality code (0–3); equal codes keep the first filename in sorted order. Nodata, nonfinite elevation and source masks exclude observations. Singletons use the same eligibility rule. A shared GeoTIFF no-data value preserves both masks without sidecars. Native inputs with fractional-cell alignment differences fail instead of silently resampling. The mosaic signature includes the algorithm version.
+- With verified downloads enabled, local mosaicking refuses to discard incompatible inputs. Legacy mode retains the existing explicitly reported exclusion behaviour. This gate covers inputs handed to the mosaic stage; it does not by itself prove that every expected NASA input reached that stage.
+- A `00_logs/collection_reset.json` marker blocks downloads, Automation and uploads from the historical project. Preserve that project; create a new project rather than deleting its success history. New projects enable verified downloads/history and, from v0.8.20, proof-checked cleanup. Disable cleanup when retaining imagery for acceptance checks. Existing projects preserve their chosen mode.
+
+## Acceptance tests before a full rebuild
+
+1. **Catalogue and download:** include parent-only observations, duplicate catalogue aliases, different processing versions and an interrupted/corrupted transfer. Reconcile selected exact filenames, not just counts. The offline regression suite covers these failures; a bounded live metadata check must also match the official records.
+2. **Extraction:** reacquire a few exact original NetCDFs, retain NASA checksums and reproduce the application's extraction with actual worker settings. Independently compare native CRS, affine transform, dimensions, WSE, QA and masks. Retained extracted arrays are useful mosaic controls but cannot substitute for this fresh extraction test.
+3. **Mosaicking:** include real overlaps, equal-quality large differences, native grid boundaries, northern/southern hemispheres, singleton and multi-input groups. Compare all eligible native pixels to an independent reference; verify filenames, versions and acquisition intervals. Synthetic overlap tests complement real cases.
+4. **EE ingestion:** upload only to a clearly identified small test collection, read back native pixels/masks and grid metadata, and compare with local outputs. Check per-band pyramiding and analysis-scale quality filtering separately from map display. Do not assume successful ingestion proves pixel integrity.
+5. **Consolidation and updates:** compare a full input-set mosaic with incremental updates, preserve the flattened source history, check asset-count savings and duplicate observations, and verify that the active replacement set contains each observation once. Keep UTC acquisition dates separate; native UTM zone/hemisphere is the default. Choose the final production grouping after the pilot.
+6. **Interrupted/resumed run:** test failure after download, extraction, mosaic creation and upload. Ensure that no stage is declared complete and no source is removed merely because an older manifest has a success flag. Keep automatic cleanup disabled until this passes.
+
+## Added verification controls and remaining acceptance work
+
+- Implemented: exact-input stage reconciliation and a repair-queue export, durable runtime/settings/code/output receipts, checksum-linked resume/cleanup guards and separate original-source/EE native-pixel checks. See [the operating guide](WORKFLOW_VERIFICATION.md) for evidence levels and limits. Recorded membership and full pixel validation are reported separately.
+- Manual historical catalogue refreshes can detect later publications/reprocessing. Scheduling and automatic repair execution are still absent; verified preflight covers only the requested period.
+- Cleanup and resume consult current downstream proofs and resolvable approved replacement history. Legacy filename-only chains remain pending. Automatic cloud retirement and active-dataset publication are still absent.
+- Still needed separately: a spatial coverage report distinguishing missing catalogue inputs, upstream source-data gaps and invalid/no-observation pixels. Re-downloading cannot create observations absent from NASA's source products.
+
+The v0.7.3 review fixes add preferred-version selection before mosaicking, revision-bound ingestion receipts, duplicate-acquisition checks, indexed receipt lookup, verification-ledger relocation and ordered cleanup. The v0.8.0 package reorganization preserves these rules. Prior bounded live pilots are retained outside the repository. This review adds offline interruption/options coverage and small real-GDAL checks; it does not rerun a live NASA-to-EE pilot or certify a continental collection.
+
+All investigation data, real-source pilot outputs and collection-reset journals stay outside this repository. Application regression tests remain in `tests/`. GitHub release titles and descriptions include the released version.
+
+## v0.8.18 workflow review
+
+The maintained regressions exercise ordinary/yearly Automation, upload enabled/disabled, wait versus submit-and-continue, independent intermediate/mosaic cleanup controls, both explicit cleanup policies and verified/legacy modes. They also exercise failure-continuation policy, process exit and reopened checkpoints, changed scientific settings, altered files/sidecars and retry outcomes. Unsupported combinations are rejected rather than silently accepted: tile-by-tile yearly processing cannot make local cross-tile mosaics after its inputs have been removed.
+
+Scientific tests use small synthetic real-GDAL rasters and an independent source comparator, including a deliberately injected shift. Network/browser/task responses in the scheduling matrix are fixtures, not new production uploads. The isolated Chrome test exercises browser DOM handling, not an authenticated EE service. This coverage supports the reviewed application behavior; it cannot guarantee future NASA availability, network reliability, browser changes, disk capacity or every possible input.
+
+
+## Verification database contention — v0.8.19
+
+Parallel extraction/mosaic workers share verification history. WAL separates readers
+from the short writer transactions; FULL synchronous commits retain durable receipts.
+A writer takes its lock before schema/write work. SQLite lock contention has up to
+three bounded attempts (30-second SQLite busy timeout per attempt, with brief delays).
+Only setup, lock acquisition and commit are retried, never a partly executed body.
+Exhausted locks and non-lock errors remain failures, with the output retained.
+
+A saved `ERROR_VERIFICATION` caused by a database lock can be recovered on Resume
+for the same source signature: the affected mosaic is rebuilt through the normal
+processing function and its evidence is recorded again. Existing bytes alone are
+not promoted to verified. Completed mosaics keep their reuse checks, and changed
+source groups or unrelated stale outputs still require explicit resolution.
+
+For unattended runs, **Continue with next tile after failure** allows independent
+tiles to proceed after a failed tile/year. Later years of that failed tile remain
+pending; its local inputs and error history are kept. The option does not override
+an explicit stop, global resource constraints or the requirement for correct input
+accounting. Upload-only pending outputs retain the existing separate continuation
+and two-round recovery behavior. Resume and Statistics preserve these distinctions.
+
+
+## Verification writer admission — v0.8.22
+
+The v0.8.19 SQLite retries alone could still expire when parallel processing workers
+competed to record verification. An OS lock now admits one verification writer
+before it opens SQLite. Workers waiting for that lock hold no database connection.
+Raster processing, checksums and receipt serialization stay outside this gate;
+readers keep using WAL. The database schema and scientific reuse signatures are
+unchanged. Runtime provenance also records the writer helper's code hash.
+
+The gate waits up to five minutes, logging progress every 30 seconds. After
+admission, the existing bounded SQLite retries and FULL synchronous commits still
+apply; transaction bodies are not replayed. A crashed process automatically loses
+its OS lock and SQLite rolls back an uncommitted transaction. The small
+`00_logs/.verification-writer.lock` file persists intentionally: its presence does
+not mean the database is locked. Do not remove it while the application is running.
+
+Tests use real competing processes and a deliberately slow transaction, including
+an abrupt process exit without Python cleanup. They check that all successful
+records survive, readers remain available, separate projects are independent,
+and a timed-out waiter never enters its database transaction. Existing Resume,
+cleanup and Statistics regressions retain their proof requirements. A persistent
+external lock or storage failure can still fail safely; it never certifies an
+unrecorded output or permits its cleanup. Use Resume after correcting the cause.
+This patch does not constitute a new production NASA-to-EE acceptance run.
+
+
+## Cleanup evidence reuse - v0.8.24
+
+Offline regressions cover actual temporary TIFF/sidecar deletion in ordinary and
+yearly modes, a simulated interruption after the parent TIFF is deleted, resumed
+companion cleanup, retained upload counts and reuse of cleaned scientific outputs.
+Both cleanup policies still enforce their existing proof requirements. Additional
+cases cover a real WAL-only committed failure, restored timestamps, atomic file
+replacement, unsupported change metadata, expired inventory, modified target bytes,
+changed evidence during assembly and failure after parent deletion. Application
+option-matrix tests continue to cover both schedulers and independent cleanup flags.
+
+Tests use isolated local fixtures; no production assets or project rasters are
+modified and this patch does not add a new NASA-to-EE scientific acceptance run.
+The cache changes no database schema or scientific checkpoint. Rollback, if needed,
+consists of installing the prior application release while the app is closed;
+retain project histories and settings.

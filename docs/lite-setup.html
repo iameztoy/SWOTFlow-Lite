@@ -1,0 +1,53 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>SWOTFlow Lite v0.1.0 setup</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;color:#163047}pre{white-space:pre-wrap;font:inherit}a{color:#12608a}</style><h1>SWOTFlow Lite v0.1.0</h1><p><a href="cloud-upload-setup.html">Google Cloud setup: billing, bucket and sign-in</a></p><pre># SWOTFlow Lite v0.1.0 — setup and workflow
+
+## First installation
+
+Use a separate application folder and a separate data project. Run Setup_SWOTFlow_Lite.ps1 in PowerShell, then Start_SWOTFlow_Lite.cmd. The launcher console is also used for memory-only NASA sign-in. Select your GDAL environment&#x27;s Python executable in Project. Do not delete your project databases/logs when cleaning raster files.
+
+For Google project registration, billing, private Standard bucket permissions, disabled soft delete/versioning for disposable staging, and Application Default Credentials, follow [the Google Cloud setup guide](cloud-upload-setup.md), steps 1–7. ChromeDriver is not used. Browser proxy sign-in and Python API access are separate; test workplace policy/access before large transfers. If necessary, control ingestion from another approved network while manually uploading at work.
+
+Choose an existing empty/pilot EE ImageCollection first. The app does not automatically create collections or modify bucket retention policies. A billing alert is not a hard spending cap. US multi-region replication and other location-dependent charges may apply even when objects are deleted quickly.
+
+Use a **new empty collection for a new Lite project**. To extend an existing collection with more tiles or dates, reopen its original project and retain its databases/logs. Use automatic and manual upload routes within that same project. Separate projects sharing one collection do not share source history: an untracked asset may contain duplicate acquisitions, so the cleanup guard retains local mosaics until that history is resolved. Do not bypass the guard or delete production assets to clear it.
+
+## Project and plan
+
+1. New project: choose a separate data folder; all downloaded, extracted, mosaic, log and history paths are created under it.
+2. Select UTM tiles, full acquisition date range, GDAL Python, Cloud project, bucket and EE ImageCollection ID. Native 100 m exact UTM grids are fixed in this release.
+3. Process: select Prepare locally or Fully automatic. Set complete-mosaic/source-byte batch targets, disk reserve and prepared-mosaic limit. Download network batches are a separate setting.
+4. Authenticate NASA in the launch console. Credentials are not saved by Lite.
+5. Catalogue / plan queries both official NASA catalogues and records every candidate and preferred-version selection. Review the expected batches. Refresh the plan when extending dates/tiles or reconciling publication changes.
+6. Start / Resume reuses recorded work. Stop after current stage retains checkpoints; sudden shutdown also retains completed receipts. Changing workers/cleanup is supported on Resume; source/scientific/destination changes are not silently accepted.
+
+## Fully automatic route
+
+The app completes a bounded local batch, then transfers mosaics to the bucket. It starts EE ingestion for completed files while other files transfer, verifies the EE metadata and source revision, and removes exact owned staging copies. With local mosaic cleanup enabled, it removes the corresponding TIFFs and sidecars before proceeding. Failed copies remain recorded and protected. Another batch cannot start if retained files or estimated processing headroom exceed the configured disk limits.
+
+Start with two Cloud transfers and two EE ingestions. Transfers can be increased to eight; more workers do not guarantee higher throughput. The staging cap includes tracked reservations and failed retained copies. The app must be running for its verification/deletion work; already submitted EE tasks can continue while the computer is off. On return, Sync EE and Resume catch up.
+
+## Manual browser upload route
+
+1. Select Prepare locally and run the local batches. Local-ready is not EE-complete. Prepared-mosaic backpressure will pause further processing before files accumulate indefinitely.
+2. Cloud → Prepare manual batch. The JSON plan is saved under the project&#x27;s 00_logs/manual_batches folder. It lists exact filenames, expected sizes/checksums, source folder, asset IDs and metadata. The UI prints the exact bucket folder.
+3. In Cloud Console, open that bucket and exact folder; use Upload files to select only the listed TIFFs from 03_mosaics. Do not rename them. Do not overwrite prior batches. Keep the project records on the controller; TIFFs alone are insufficient to reconstruct every original processing revision.
+4. Select the plan and Import / Resume bucket batch. This can run while more browser uploads arrive. Unavailable files remain waiting. Existing completed uploads are matched by bytes/checksum, not names alone.
+5. Import makes a generation-checked **server-side copy** into an app-owned revision path. This avoids an overwrite of the browser source changing the bytes EE ingests. No raster is uploaded again from your computer. It temporarily creates two billed copies and a copy request; default automatic transfer avoids this extra copy.
+6. EE ingestion uses the same metadata manifest as automatic upload. Only after verification are the owned copy and exact manual original generation deleted. Replaced/unlisted files are retained. Local mosaic cleanup remains separately selected and uses the same evidence as automatic mode.
+7. Use Sync EE / clean verified copies to catch up, including earlier manual batches. Import status JSON files are reports, not additional batch plans.
+
+Browser uploads cannot be constrained by the app&#x27;s staging cap. Upload manageable batches and leave the controller running so objects are ingested/deleted promptly. Do not run two controllers on the same project. Moving between computers requires the project folder/history and a valid ADC sign-in on the controller; personal resumable secrets are not part of project exports.
+
+## Statistics and recovery
+
+Refresh Statistics for expected preferred NASA originals, last verified EE representation, pending inputs, duplicate ownership, per-batch dates/status and the shared processing/upload metrics. Manual original and app-owned bucket copies are accounted separately. Zero NASA acquisitions is shown as no available acquisitions. A complete first year never makes later years complete.
+
+Project source counts remain visible if another asset in the collection has unknown lineage. Statistics reports those unresolved collection assets separately and withholds collection completeness; **Sync EE** refreshes the inventory. This does not mean the project&#x27;s already verified uploads failed.
+
+On an error, retain the project and both pending raster copies. Read the stage log or manual batch status. Retry/Resume uses stable request IDs and already completed stages. Repeated upload failure does not prove source corruption. Source changes, stale/mismatched provenance or changed object generations require review rather than blind overwrite/deletion.
+
+Local source/metadata verification is not a guarantee of pixel-level scientific correctness across the continent. The test report documents the small sample checked. Periodic independent source/EE checks remain useful.
+
+## Costs
+
+Use Billing → Reports, filter to the project and Cloud Storage, group by SKU. Costs typically arrive within a day but can take longer. Disabling soft delete affects future deletions; previously deleted copies keep their prior expiry. The app tracks bytes/states, not a guaranteed final invoice. Inspect the pilot bill before terabyte-scale work.
+</pre></html>

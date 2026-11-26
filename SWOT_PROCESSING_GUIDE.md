@@ -1,0 +1,425 @@
+# SWOT Processing Guide
+
+This document keeps the processing-specific behavior that is too detailed for the main README. For installation, first launch, and day-to-day GUI usage, see [GETTING_STARTED.md](./GETTING_STARTED.md).
+
+## Processing Order
+
+The current GUI workflow is:
+
+1. `Download`
+2. `Duplicate Removal`
+3. `Extraction`
+4. `Mosaic`
+5. `Upload`
+
+An optional **EE Consolidation** tab follows Upload and precedes Statistics for post-ingestion processing. It uses `swotflow/consolidation/core.py`, `swotflow/consolidation/update.py` and `swotflow/consolidation/tab.py`, independently of the local extraction/mosaic workers. Introduced in v0.5.0, `swotflow/consolidation/register.py` and `swotflow/consolidation/coverage_ui.py` add a separate transactional local register, Statistics tables and source-tile consolidation coverage on the map. They do not change the pipeline database, workers, audits or EE assets. See [GETTING_STARTED.md](./GETTING_STARTED.md) and [replacement-register operations](EE_REPLACEMENT_REGISTER.md) for controls, duplicate checks, verification scope and the remaining retirement work.
+
+In v0.6.0, **Statistics → NASA History** preserves candidate filenames, processing versions and catalogue revisions, with batch-transfer checkpoints when enabled for future runs. Historical checks compare the existing CRID/counter policy winner with recorded EE inputs, not merely downloaded files. This separate metadata checker can reconcile the 100 m and parent Raster catalogues without changing production download scope. See [NASA_HISTORY.md](NASA_HISTORY.md) for activation, evidence and limits.
+
+Its native grouping key is UTC source start date, cycle, pass, EPSG UTM zone/hemisphere and 100 m grid-origin phase. Keeping latitude-band tiles separate adds the tile label to that key. Common-grid grouping replaces the native grid key with EPSG:6933 and, optionally, the source hemisphere. A stored mosaic whose known original inputs start on different UTC dates is excluded rather than silently reassigned. `system:time_start` / `system:time_end` retain the earliest source start and latest source end; source-level intervals and original filenames remain in the local plan.
+
+The paired selector first pins each input to its native 100 m grid, intersects elevation and categorical-quality validity, then optionally uses nearest-neighbour reprojection to the explicit common grid. Its integer ordering score makes lower quality codes win, with deterministic earliest-start/asset-ID tie resolution. `qualityMosaic` selects elevation, quality and source index together. All three output bands have SAMPLE pyramids and an explicit export transform; no quality code is averaged. This preserves stored-source pairing and does not reconstruct or certify earlier original-tile pairing.
+
+Exports are restricted to a collection separate from the original/new source inputs, with no overwrite or delete path. Incremental updates may append new revision IDs to the existing consolidated collection. Groups are fingerprinted; every immediate raster contributor is checked again before submission. Each confirmed batch contains at most ten jobs at low task priority, leaving other jobs alone. Plans, source metadata/lineage, EE client version and task request/operation IDs are retained in the [durable consolidation data folder](DEVELOPMENT.md#durable-application-data), never in live processing manifests. A failed or uncertain submission retains its journal and is not automatically retried. Export completion is not a scientific verification or a deletion approval.
+
+Incremental consolidation flattens original stored-source history, remaps the previous mosaic's per-pixel `source_index` into the union's earliest-start/asset-ID order, then applies the same quality selector. It reads the previous raster plus new raster inputs, without needing retired leaf assets. Previous plans and asset properties/grid/pyramids must agree. Native, latitude-band and common-grid updates retain their previous settings; changing date filters alone is permitted. Duplicate observations, processing-version replacement, revised original timestamps, changed source fingerprints and incomplete granule history block affected groups. Ambiguous parallel revisions stop the preview. The latest chain head is used for planning; scientific verification and selection of a published active revision remain separate decisions. See [EE_CONSOLIDATION.md](./EE_CONSOLIDATION.md) for the operation contract and reproducible checks.
+
+Relevant API contracts: [qualityMosaic selects all bands from one source](https://developers.google.com/earth-engine/apidocs/ee-imagecollection-qualitymosaic), [export grid and pyramiding settings](https://developers.google.com/earth-engine/apidocs/export-image-toasset), and [Earth Engine projections](https://developers.google.com/earth-engine/guides/projections).
+
+Default working folders:
+
+- `<LOCAL_PROCESSING_ROOT>\01_raw_downloads`
+- `<LOCAL_PROCESSING_ROOT>\02_extracted_geotiffs`
+- `<LOCAL_PROCESSING_ROOT>\03_mosaics`
+- `<LOCAL_PROCESSING_ROOT>\00_logs`
+
+When a SWOTFlow project is open, `<LOCAL_PROCESSING_ROOT>` is the project root and the same folder names are created inside that project. The active `config.yaml` remains a mirror of the open project so CLI tools still use the same workflow settings.
+
+The detailed sections below prioritize the main processing path: download, extraction, mosaicking, upload compatibility, and runtime setup. Optional cleanup and maintenance utilities are documented at the end.
+
+## Projects And Spatial Presets
+
+Projects are intended for reusable AOI workflows, such as `Okavango Delta` and `Africa Full`.
+
+Each project stores:
+
+- `project.yaml` with the current processing settings
+- `swotflow.sqlite3` with the authoritative indexed workflow state
+- `profiles/*.json` tile presets saved from the Download tab
+- download history used by `Prepare Update`
+- intermediate files in project-specific raw, extracted, mosaic, and log folders
+- upload debug screenshots and HTML dumps in `00_logs/upload_artifacts`
+- readable stage CSV exports in `00_logs`; legacy `workflow_manifest.csv` files are retained after migration
+
+SQLite is the source of truth for cumulative stage records, resume decisions, Cleanup, Statistics, and Earth Engine verification. Existing CSV manifests are imported automatically the first time a project is opened after this upgrade and are preserved as readable snapshots. New projects create `swotflow.sqlite3` immediately. CSV exports are no longer reread and rewritten after every uploaded asset.
+
+The GUI requires an active project before saving config, previewing downloads, downloading, or running processing steps. `config.yaml` remains a session mirror for CLI compatibility and can contain paths from the previous session; if it points to a folder that contains `project.yaml`, the GUI auto-opens that project on startup. Otherwise, create or open a project first so the output folders, reports, manifest, and Earth Engine target are explicit.
+
+The Download tab's selected UTM token list remains the source of truth. Built-in continent presets and project presets only populate that same selected-token state, so manual editing and paste-style workflows still work.
+
+The visual selector opened from `Open UTM Map Selector` draws continent outlines and the UTM grid from precomputed JSON. It shows UTM zone numbers and latitude-band letters for orientation. It is a tile-selection aid, not a precision GIS editor: click a tile to toggle it, then apply the selection back to the Download tab.
+
+The current background geometry is a continent layer, not a country/admin-boundary layer. Use a country boundary GeoPackage later if internal country borders are needed.
+
+Built-in continent presets are read from `spatial_presets/continent_utm_tiles.json`, and the visual selector reads `spatial_presets/utm_display_geometries.json`. Both files are generated offline from the UTM grid and continent GeoPackages with:
+
+```powershell
+python -m swotflow.tools.build_spatial_presets --utm-grid C:\path\to\World_UTM_Grid.gpkg --continents C:\path\to\World_Continents.gpkg --output spatial_presets\continent_utm_tiles.json --display-output spatial_presets\utm_display_geometries.json
+```
+
+## Download Inputs
+
+The Download tab searches PO.DAAC through `earthaccess` and writes matched SWOT L2 HR Raster 100 m NetCDF files to `01_raw_downloads` by default.
+
+Searches are CMR searches. CMR is NASA's Common Metadata Repository, which PO.DAAC/Earthdata uses to expose granule metadata before data download. For large requests, SWOTFlow uses paged CMR retrieval when the installed `earthaccess` version supports it. The progress output reports the total matching granules, page-by-page metadata retrieval, metadata normalization, and product-version filtering before `earthaccess.download()` begins. This makes long searches for tens of thousands of granules more transparent, but it does not eliminate the metadata-listing time. Each CMR page request is bounded by `download.search_request_timeout_seconds`. If a remote metadata request stalls during Automation, that tile's download stage fails with the CMR error in its stage log and the tile remains resumable; the queue can then continue with later tiles instead of waiting indefinitely. After the first tile pass, Automation retries deferred CMR/download-search failures up to `automation.deferred_download_retry_passes`.
+
+Phase 1 download filtering uses:
+
+- collection short name, default `SWOT_L2_HR_Raster_100m_D`
+- start and end date
+- one or more UTM/MGRS tile tokens embedded in filenames, such as `UTM30R`
+
+Tiles can be typed manually, selected in the searchable list, populated from a built-in continent preset, loaded from a project tile preset, or toggled in the visual UTM selector. The text/list selection remains editable after applying any preset or map selection.
+
+The preview report records matched filenames, UTM tokens, date metadata, known file sizes, local paths, status, raw-file presence, manifest-known status, and Earthdata links. After a successful download, the launcher points Duplicate Removal and Extraction at the same raw-download folder.
+
+`Download Matches` requires Earthdata authentication. If the current SWOTFlow session has not authenticated yet, the GUI warns before starting and the download worker authenticates before the CMR search. If Earthdata asks for credentials, enter them in the console window. `Download Matches` intentionally repeats the CMR search before transferring files so the download run uses a fresh remote match list. For large date/tile selections this search can take several minutes before any NetCDF files start downloading. During that phase the GUI shows an indeterminate progress bar and search/queue/authentication phase messages.
+
+The `Product version filter` is applied after the Earthdata search and before downloading. `Best product version only` groups remote matches that represent the same SWOT observation and selects the highest-ranked CRID/product-counter file for download. Older versions remain in the SQLite download/workflow records and CSV exports with `EXCLUDED_OLDER_VERSION` so the project still records that they existed and were intentionally not downloaded. Use `All matching files` when you want every remote file and prefer to let Duplicate Removal move older versions later.
+
+For project time-series updates, `Prepare Update` uses the last successful project download end date as the next inclusive start date and sets the end date to today. Existing-file skipping, project-record skipping, and duplicate cleanup are still responsible for handling overlap safely.
+
+For date-aware update QA, Preview Search and Automation preflight store selected remote granules in a persistent SQLite update campaign keyed by collection, product-version filter, start date, and end date. Additional tile searches for the same window extend the same campaign instead of replacing it. A different date window creates another campaign. Statistics > Status Map > `Update Coverage` includes an `Update window` selector for switching between campaigns. Each campaign follows its expected source granules through downloaded, extracted, mosaic-source, and uploaded/EE-verified records, so completed tiles remain visible while later campaigns can be tracked independently.
+
+After a preview or download run, the report is written with `downloaded`, `raw_exists`, and `known_from_manifest` columns. `downloaded=yes` means the matched granule is accounted for either by a complete raw file or by a previous project download record. `raw_exists=no` and `known_from_manifest=yes` means the project has already downloaded that granule before, even if the raw NetCDF has since been deleted. `no` means the granule is still missing, failed, or was cancelled before it was attempted. The GUI summary reports accounted-for granules versus matched granules.
+
+SWOTFlow downloads granules in batches. `Download threads` is passed to `earthaccess.download()` as the number of parallel workers for a batch, while `Batch size` controls how many granules are submitted to one earthaccess call. Use `Batch size = 1` for the old one-file-at-a-time behavior. For large runs, start with `threads = 6` and `batch_size = 25`; increase carefully if the network and PO.DAAC responses remain stable.
+
+`Stop Download` is cooperative. It requests the download loop to stop after the current batch finishes or fails, writes the report with remaining files marked `CANCELLED` or `MISSING`, and leaves already downloaded files in place. Restart the same search with `skip_existing` and `skip_manifest_existing` enabled to continue.
+
+The visual UTM selector uses two different ideas: blue tiles are active query selections for the next preview/download, green tiles have at least one granule recorded in the project download records, and teal tiles are both selected and already covered. Keeping previously downloaded covered tiles selected is safe: SWOTFlow will skip project-known granules and only download new matching granules unless project-record skipping is disabled.
+
+Extraction, mosaic, and upload now also contribute to cumulative stage tracking. SQLite is the authoritative store; CSV files in `00_logs` are readable exports, snapshots, and compatibility reports:
+
+- `extract_manifest.csv` exports NetCDF inputs that were written, skipped because the GeoTIFF exists, or skipped because they were already recorded.
+- `mosaic_manifest.csv` exports mosaic outputs and the source-file signature used to create or accept them.
+- `upload_report.csv` exports the Earth Engine upload ledger.
+- `ee_asset_inventory.csv` exports the latest Earth Engine destination listing used to verify already-uploaded assets.
+- the SQLite workflow dataset combines download, extract, mosaic, and upload rows into one indexed project-level ledger.
+
+Use the `Statistics` tab after any major run to audit the active project. It reads the SQLite project records, saved CSV exports where needed, and local folders to summarize total project files and size, file counts per processing level, duplicate files moved, files per UTM tile, dates covered, recorded downloads, remote matches excluded as older versions, completed extractions, mosaics, upload status, EE-verified existing assets, UTM-filtered upload rows, known cumulative download size, update coverage by tile and campaign, and observed SWOT cycles, passes, scenes, CRIDs, and product counters. The Processing Levels view treats the processing level as a future-proof `CRID_productCounter` label such as `PGD0_01`; it reports remote matches, selected downloads, accounted downloads, completed extractions, mosaic source participation, and uploaded/verified rows per level, plus the same breakdown by UTM tile. The Uploaded view reports upload status counts, uploaded/verified assets by source tile, date, processing level, and output grid, plus QA tables for pipeline completeness by UTM tile, ready mosaics not yet uploaded/verified, and grouped upload failures or warnings. It also draws lightweight bar plots for stage counts and top UTM tiles. The Status Map view has two modes: `Pipeline Status` for cumulative furthest-stage status, and `Update Coverage` for a selected persistent date-window campaign. The Mosaics statistics view reports completed mosaics by output tile/grid and completed mosaic participation by source UTM tile. The Lineage view joins download, extraction, and mosaic records into a per-file QA table so downloaded NetCDFs can be audited as used in a mosaic, extracted but not mosaicked, failed extraction, excluded from a partial mosaic, or intentionally excluded as an older remote version.
+
+Statistics refresh automatically after completed Download, Duplicate Removal, Extraction, Mosaic, and Cleanup actions. Upload runs in a separate console window, so SWOTFlow watches the SQLite database revision and reads indexed upload-status counts without reparsing `upload_report.csv`. Automatic refreshes are coalesced and rate-limited while uploads are active. You can still click `Refresh Statistics` at any time. Each refresh saves the latest statistics under `00_logs/statistics` as `project_statistics_snapshot.json` plus CSV tables for metrics, stage statuses, UTM tiles, dates, processing levels, processing levels by tile, mosaic output grids, mosaic source tiles, mosaic source exclusions, full mosaic lineage, upload statuses, uploaded tiles/dates/levels/grids, upload QA by tile, update campaign summaries, campaign coverage by tile, active update coverage by tile, ready-not-uploaded mosaics, and upload errors. When a project is reopened, the GUI loads the latest saved snapshot immediately; refresh again to recompute from current files and project records.
+
+The Automation tab uses the same project database records and reports as the manual tabs. Its date range is explicit and can be copied from the Download tab with `Copy Download Date Range`; the GUI warns when Automation dates differ from Download dates so manual and unattended runs do not accidentally process different temporal windows. Preflight classifies selected UTM tiles as already complete, partial/resumable, needing update, or new for the requested date range. Upload-enabled preflight automatically runs one paginated Earth Engine asset sync before classification and blocks if verification fails, preventing stale inventory data from driving upload or cleanup decisions. The optional `Start automatically after successful preflight` setting begins execution as soon as preflight passes. Keep `Prevent computer sleep while automation runs` enabled for unattended Windows runs; it requests that Windows stay awake while Automation is active, but it cannot stop forced restarts or power loss. A run stopped with `Stop After Current Stage` retains its completed stage records and can continue with `Resume Run`; a fresh preflight creates a new current-state plan. Tiles already complete for the requested date range are skipped on resume, including cleanup stages, so completed tiles are not repeatedly rescanned. Automation writes run logs under `00_logs/automation_runs/<run_id>` and deletes intermediate files only when downstream project records or Earth Engine verification prove the next stage exists.
+
+The Automation progress percentage is calculated from unique tile-stage units. A run without upload has six units per tile; an upload-enabled run has nine. Successful, warning-complete, and intentionally skipped stages count as executed, while detailed repeated file-progress messages and failed stages do not inflate the percentage. This is now labelled `Stage execution` because 100% means that the configured stages were attempted, not necessarily that every browser submission became an EE asset. The final Automation summary separately reports retryable unverified mosaics and affected tiles. Resuming reconstructs stage execution from the saved run state.
+
+Automation recovery depends on how the run ended. An intentional `Stop After Current Stage` should normally be continued with `Resume Run`, without another preflight. A fully completed queue requires a new preflight for the next date window or tile selection. After a power loss or unexpected shutdown, resume normally unless upload was active. For an interrupted upload, allow Earth Engine tasks to settle and run a fresh upload-enabled preflight so the automatic asset sync verifies successful submissions before the missing assets are replanned. CMR/Earthdata metadata timeouts are treated as transient download-search failures: the failed tile remains resumable, Automation can continue with later tiles even when the general failure policy is otherwise strict, and the failed tile is retried in the deferred retry pass.
+
+The separate `Cleanup` tab provides conservative cleanup controls. `Preview Cleanup` lists only files with downstream project-record proof: raw NetCDFs that have completed extraction rows, extracted GeoTIFFs that belong to completed non-stale mosaic rows, and mosaic GeoTIFFs that are recorded as uploaded or already present in Earth Engine. Delete selected rows when you want fine control, or delete all previewed candidates when the project stage is complete and storage is the priority.
+
+Cleanup intentionally preserves files from failed stages unless a downstream report records an auditable reason to remove them. For example, raw NetCDF files remain when Extraction wrote an error instead of a completed manifest row, and extracted GeoTIFFs remain when Mosaic cannot identify a usable compatible source set. Orphaned temporary mosaic sidecars such as `.part.tif.aux.xml` are not scientific products; they are listed as temporary cleanup candidates when the matching `.part.tif` no longer exists.
+
+Earthdata `partial_*` fragments have a separate, stricter cleanup rule. The normal Cleanup preview scans only the configured download folder (not its subfolders), reads a bounded metadata header, and identifies descriptor, cycle, pass, scene, acquisition interval, CRID and product counter. Only the supported HR Raster fixed-width HDF5 attribute encoding is recognized; unsupported, incomplete or ambiguous headers are retained. A matching tile/date, elapsed time, or file size alone is never completion proof.
+
+A partial becomes eligible only when the exact product has both a successful download record and a completed extraction record dated after the fragment's last modification, and the fragment has been idle for at least one hour. A different/higher processing version does not satisfy this rule. SQLite-backed records remain valid if the complete raw/extracted files have already been removed through the normal workflow. The preview labels candidates `partial` and names the corresponding product.
+
+Partial deletion is manual through Cleanup, not an automatic Automation cleanup stage. A shared output-folder lock excludes downloads (manual, CLI and Automation) while partials are checked/deleted. The GUI also blocks partial deletion during its active download/Automation run. Before deleting, current project proof, file identity, timestamps, size and header hash must still match the preview; links, junctions and hard-linked files are protected. Requests/results are appended to `partial_download_cleanup.jsonl` beside the extraction manifest, normally `00_logs`. Interrupted requests are not proof of deletion. Close older app instances before using this feature, since they do not participate in the new lock. No manifests, update records or uploaded assets are removed.
+
+Extraction validates existing GeoTIFF outputs before accepting them as reusable. If a stale or invalid extracted GeoTIFF is found while the raw NetCDF is still present, Extraction removes the bad output and rewrites it automatically. Validation rejects missing projections, missing/default geotransforms, non-finite geotransforms, and unrealistic pixel sizes/origins. If the raw NetCDF has already been deleted and a later mosaic detects a bad extracted GeoTIFF, the correct repair is to redownload that raw granule and re-extract it; SWOTFlow should not guess georeferencing from neighboring files.
+
+When one or more inputs in a mosaic group are invalid or incompatible, Mosaic keeps the largest compatible source set and creates `MOSAIC_CREATED_WITH_EXCLUSIONS` if a clear dominant set exists. The output name and `input_files` refer only to the sources actually used. Excluded source files and reasons are recorded in `excluded_input_files` and `excluded_reasons`, exported to `project_statistics_mosaic_exclusions.csv`, and shown in Statistics > Mosaics. Those excluded GeoTIFFs become QA cleanup candidates because the mosaic report preserves the audit trail. If incompatible source groups are tied and no dominant set can be selected, Mosaic still reports `SKIPPED_INCOMPATIBLE` instead of choosing arbitrarily.
+
+For common-CRS whole pass/date mosaics, a newly added tile can change an existing mosaic group. SWOTFlow therefore compares the current source signature with the recorded mosaic manifest. If an output file already exists but the source set changed, the mosaic report marks that row `STALE_EXISTS`; enable overwrite or remove the stale output before rebuilding that mosaic group.
+
+Mosaic-per-tile statistics depend on the output CRS. When extraction keeps the original SWOT tile/grid CRS, the mosaic output grid is a UTM tile token and the output-grid count is the direct "mosaics per tile" count. When extraction reprojects to a common CRS such as `LAEA` or `WGS84`, the mosaic output no longer belongs to one UTM tile. In those cases, use the source UTM tile participation table: it parses each completed mosaic row's `input_files` from project mosaic records or the exported `mosaic_manifest.csv` and counts which original SWOT tiles contributed to each common-CRS mosaic.
+
+### Saved Update Windows And Recovery
+
+An update campaign describes expected coverage, not an executing process. **Statistics > Update Runs > Update Windows** reports completion for each saved date window; **Status Map** separately displays the current Automation execution state. `Complete (recorded matches)` requires downstream proof for all expected observations. `No recorded matches` is not proof that a remote catalogue search found nothing.
+
+**Continue Selected Update** restores that campaign's dates/tiles to Download and Automation and launches preflight. **Archive/Restore Selected** hides mistaken windows without deleting expected products, run files, manifests, or rasters. Archived windows remain in SQLite and exported history, are omitted from the default map selector and automatic latest-run lookup, and can be shown/restored. Archiving is not a cleanup or completion operation. A new explicit preview for those dates reactivates the campaign.
+
+For `best` product filtering, coverage matches observation identity ignoring only CRID and product counter. A higher-ranked product may fulfill an older expectation only at stages with supporting records; an older product cannot fulfill a newer expected version. Counts represent observations, not every historical product version. `all` mode retains exact-version requirements. Source lineage determines which observations reached a verified mosaic; `SUBMITTED` is not verification. Replacement-needed EE conflicts remain blocked rather than being overwritten.
+
+`automation.refresh_cmr` defaults to true in the GUI. This refreshes the remote catalogue even for a previously searched window, which is important for late NASA products and reprocessing. Disable it only to plan from cached expected records, accepting that newly published products cannot be discovered that way. Completed stage history is reused in either case. Preflight checks source-level proof for the requested observations before marking a tile complete; lifetime totals from earlier dates alone are insufficient. Resume is for an unchanged request; Start rejects a preflight whose dates, tiles, or upload scope no longer match.
+
+Only one preflight or Automation run can hold a project's execution lock, including across separate app instances. CSV exports use private temporary files and atomic replacement; SQLite remains authoritative. `project_statistics_update_windows.csv` and the statistics snapshot preserve window summaries alongside the existing run and campaign reports.
+
+## Extraction Outputs
+
+Extraction converts each SWOT NetCDF into one 2-band GeoTIFF:
+
+- band 1: `wse`
+- band 2: `wse_qual`
+
+Output naming:
+
+- original CRS: `<netcdf_stem>.tif`
+- Africa LAEA: `<netcdf_stem>_africa_laea.tif`
+- WGS84: `<netcdf_stem>_wgs84.tif`
+
+The extraction step follows the notebook logic and writes uncompressed GeoTIFFs.
+
+Extraction can run sequentially or with multiple worker processes. `extract.workers: 1`
+keeps the original one-file-at-a-time behavior. Higher values process independent
+NetCDF inputs in parallel, while the main process still writes the cumulative
+manifest, error CSV, and workflow manifest after collecting worker results.
+
+## Mosaic Grouping
+
+Default grouping mode is `utm_zone`.
+
+Groups are built from:
+
+- SWOT descriptor
+- cycle ID
+- pass ID
+- start date from `RangeBeginningDateTime`
+- exact coordinate-system token such as `UTM28P`
+
+Optional original-projection grouping mode is `utm_zone_hemisphere`.
+
+That mode keeps original-projection processing, but collapses MGRS latitude-band tokens into UTM zone plus hemisphere. For example, `UTM30P`, `UTM30Q`, `UTM30R`, and `UTM30S` become `UTM30N`. Southern latitude bands such as `UTM30M` become `UTM30S`. GDAL validation still checks actual CRS compatibility before writing.
+
+Common-CRS mode is `pass_date_common_crs`.
+
+That mode is intended for already reprojected extraction outputs and groups by:
+
+- descriptor family with the configured common CRS label
+- cycle ID
+- pass ID
+- start date
+
+It ignores the original UTM token in the filename, but still validates actual raster compatibility before merging.
+
+In common-CRS mode, do not interpret mosaic outputs as per-UTM-tile products. The output grid is the configured common CRS, while the source-tile statistics and `input_files` manifest column preserve the UTM provenance needed to audit coverage.
+
+Mosaic can also run sequentially or with multiple worker processes. `mosaic.workers: 1`
+keeps the original one-group-at-a-time behavior and is the safest default.
+Higher values process independent mosaic groups in parallel, using temporary
+`.part.tif` outputs that are promoted only after a group succeeds. Increase this
+cautiously because mosaicking can saturate disk I/O, use substantial RAM, and fail
+earlier if the output drive is nearly full.
+
+## Upload Selection And Verification
+
+Upload defaults to scanning every GeoTIFF in the configured origin folder. When `upload.scope` is `selected_utm`, only files whose output UTM tile or mosaic source UTM tiles intersect `upload.utm_tiles` are eligible. Original-CRS products are matched from the filename coordinate token. Common-CRS mosaics such as `LAEA` and `WGS84` use project mosaic records or exported `mosaic_manifest.csv` `input_files` to recover the original source UTM tiles. The Upload tab's tile list prefers tiles that are actually represented by files in the current origin folder and are not already recorded as completed, skipped-existing, or EE-verified in the project upload records; if it cannot derive any local upload-ready tiles, it falls back to the global UTM list.
+
+Before upload planning, SWOTFlow can list the destination Earth Engine collection with `ee.data.listAssets`. Existing asset IDs are written as `EE_VERIFIED_EXISTS` in the project upload records and skipped. This is more reliable than trusting the exported upload report alone after an interrupted run. The latest listing is cached in the project database and exported to `ee_asset_inventory.csv`. The Upload tab's tile list shows local upload-ready source tiles after filtering out files already recorded as `COMPLETED`, `SKIPPED_ALREADY_EXISTS`, or `EE_VERIFIED_EXISTS`; the status line also summarizes tiles already completed or verified in the upload records.
+
+Dry runs are optional but useful after changing upload settings. They do not upload anything; they write the full per-file plan to the project database, export `upload_report.csv`, and print only a short console preview to avoid flooding the terminal for large projects. Real runs write `PLANNED_UPLOAD` rows before the confirmation prompt, then update those rows as files are submitted and completed. The Upload tab progress bar is derived from indexed project status counts.
+
+If a run is interrupted or the console is closed while rows are still `SUBMITTED_PENDING_VERIFICATION` or `SUBMITTED`, use the Upload tab's `Sync EE Assets` action after Earth Engine has finished ingesting the assets. This runs an inventory and recent-operation sync against Earth Engine. Matching assets become `EE_VERIFIED_EXISTS`; active ingestion operations remain protected from duplicate submission; failed operations become retryable errors. If the browser dialog closed but neither an asset nor an ingestion operation appears after the confirmation grace period, the row becomes `UNKNOWN_AFTER_CLICK` and remains retryable with its local mosaic preserved. Use `Select Retryable Uploads` in the Upload tab to replace an old manual tile selection with every source tile represented by unresolved local mosaics. Statistics merges Earth Engine inventory records with upload records, so EE-verified assets count as uploaded even if an older exported report row was stale or filtered by a later selected-tile run.
+
+The browser uploader has defensive recovery for two common Earth Engine UI issues. First, when Chrome or Selenium reports a page-load timeout but the Earth Engine Code Editor is already visible, SWOTFlow checks for usable UI controls and continues instead of failing immediately. Second, if Earth Engine disables the final `UPLOAD` button with a validation message such as `Please provide an asset ID`, SWOTFlow retries the Asset Name field through keyboard input. If recovery itself fails or Chrome disconnects, the current asset is written as `ERROR` in the project upload records rather than being left as `PLANNED_UPLOAD`, so `Resume previous run` can retry it after `Sync EE Assets`.
+
+For the current Earth Engine dialog, per-file submission waits for dialog closure rather than repeatedly switching to the Tasks panel. Dialog closure records `SUBMITTED_PENDING_VERIFICATION`, but it is not durable proof that the local transfer reached Earth Engine. `upload.max_pending_browser_uploads` therefore applies backpressure after each click: when the cap is reached, SWOTFlow waits until recent Earth Engine operations acknowledge enough transfers before opening more dialogs. Use `3` as the default and `1` on a particularly slow or unstable link. Browser-side percentage/progress changes reset the idle timeout, up to `upload.submission_transfer_timeout_minutes`; an open dialog with no progress for `upload.submission_confirmation_timeout_seconds` is treated as stalled, saved as debug evidence, recovered, and retried. `upload.completion_mode` controls what happens after a batch or tile: `wait_for_ee` waits for active Earth Engine ingestion tasks, while `submit_and_continue` reconciles visible tasks and one EE inventory pass without blocking on slow ingestions. `ERROR`, `UNKNOWN_AFTER_CLICK`, and unverified pending rows preserve the local mosaic. At the end of an upload-enabled Automation queue, SWOTFlow performs one global deferred upload-repair pass: it synchronizes EE assets and operations, retries only unresolved local mosaics from the selected automation tiles, synchronizes again, and then cleans only verified mosaics. Raw and extracted cleanup remain tile-scoped, but upload-enabled mosaic cleanup is a global verified-mosaic sweep, allowing later syncs to clean earlier tiles once their assets become visible in Earth Engine. Upload status transitions are retained in SQLite and exported to `00_logs/upload_events.csv`, so a recovered error remains auditable after the current `upload_report` row becomes verified.
+
+## Mosaic Output Naming
+
+Mosaic output names remain upload-compatible. They use:
+
+- the SWOT-compatible descriptor
+- cycle ID
+- pass ID
+- scene ID `MOSA`
+- minimum start timestamp across the group
+- maximum end timestamp across the group
+- original CRID when consistent, otherwise `MIXD`
+- product counter `01`
+
+Example:
+
+```text
+SWOT_L2_HR_Raster_100m_UTM28P_N_x_x_x_034_266_MOSA_20250618T055612_20250618T055713_PID0_01.tif
+```
+
+`MOSA` is the scene ID and is the only mosaic marker in new output names. Older outputs with an extra `_mosaic` suffix remain parseable, but SWOTFlow no longer creates that suffix.
+
+When a mosaic combines different source CRIDs, the filename uses `MIXD` in the CRID position. The main mosaic report records the source CRIDs, source product counters, dominant CRID, preferred CRID by rank, and a `mixed_crid` flag. The focused `mixed_crid_mosaics.csv` report contains only mixed-CRID groups.
+
+## Mosaic Raster Behavior
+
+Mosaic outputs are written as uncompressed GeoTIFFs.
+
+When `mosaic.write_world_file` is enabled, a `.tfw` file is written beside each output `.tif`.
+
+Mosaic outputs keep the extraction-style band names:
+
+- band 1: `wse`
+- band 2: `wse_qual`
+
+Singleton groups are written to the mosaic output folder with the mosaic output name. Original files are never moved or deleted.
+
+## Overlap Rule
+
+### `wse`
+
+`wse` keeps the existing deterministic source-priority rule:
+
+- sources are sorted by filename
+- in overlaps, the first sorted source keeps priority when it has valid data
+
+This behavior was left unchanged.
+
+### `wse_qual`
+
+`wse_qual` uses a more specific overlap rule to avoid seam artifacts from edge class `3`.
+
+Per pixel, the mosaic chooses:
+
+1. the first source, in current priority order, where `wse` is valid and `wse_qual` is `0`, `1`, or `2`
+2. otherwise, the first source where `wse` is valid and `wse_qual` is `3`
+3. otherwise, band-2 nodata
+
+This means:
+
+- `wse_qual=3` no longer overwrites a better `0/1/2` value from another overlapping tile
+- `wse_qual=3` is still preserved when it is the only available quality class for a valid `wse` pixel
+- the current filename-based priority rule is still the tie-breaker when both sources have valid `0/1/2` values
+
+## Upload Compatibility
+
+The uploader reads only `.tif` and `.tiff` inputs. Sidecar files such as `.tfw` are ignored.
+
+Both original extracted files and mosaic files are compatible with the shared SWOT metadata parser.
+
+Uploaded metadata includes:
+
+- `system:time_start`
+- `system:time_end`
+- `swot_descriptor`
+- `swot_grid_resolution`
+- `swot_coordinate_system`
+- `swot_granule_overlap`
+- `swot_cycle_id`
+- `swot_pass_id`
+- `swot_scene_id`
+- `swot_crid`
+- `swot_product_counter`
+
+For mosaic outputs, `swot_scene_id` is `MOSA`.
+
+For original extracted files, `swot_scene_id` remains the original scene token such as `065F`.
+
+## Environment Split
+
+The project intentionally uses two environments:
+
+- `.venv` for the GUI, duplicate removal, uploader, and small Earth Engine API utilities
+- the GDAL conda environment for extraction and mosaicking
+
+This split is deliberate. Heavy geospatial processing stays in the GDAL runtime, while the Selenium uploader stays lightweight and isolated.
+
+## Optional Local Raw File Duplicate Removal
+
+This section refers to the `Duplicate Removal` GUI tab. It is for local raw downloaded SWOT files before extraction. It is not the same as deleting images from an Earth Engine ImageCollection.
+
+Use it only when the raw download folder contains repeated versions of the same SWOT granule.
+
+For generic filenames, duplicate removal keeps the highest final `_NN` suffix.
+
+For SWOT L2 HR Raster filenames, duplicate removal groups the same granule while ignoring only `CRID` and `ProductCounter`. The preferred file is selected by:
+
+1. newer major CRID release, for example `D` over `C`
+2. higher minor release inside the same major release, for example `PIC2` over `PIC0`
+3. higher fidelity inside the same major/minor release, for example `PGD0` over `PID0`
+4. highest product counter inside the same CRID, for example `PID0_02` over `PID0_01`
+
+Moved-file logs include the kept and moved CRID/counter values and the reason for each move.
+
+## Optional Earth Engine Collection Cleanup Utility
+
+This utility removes many image assets from an Earth Engine ImageCollection after a mistaken or test upload. It is not part of the GUI because it is an occasional maintenance action, not a normal SWOT processing step.
+
+Script:
+
+```text
+swotflow/tools/delete_ee_collection_children.py
+```
+
+Dependency:
+
+- `earthengine-api` is included in `requirements.txt`, so a fresh `.venv` installation gets it with `python -m pip install -r requirements.txt`.
+- The script can also run outside SWOTFlow if that Python environment has `earthengine-api` installed and Earth Engine authentication configured.
+
+Recommended workflow:
+
+1. Authenticate the Earth Engine API once.
+2. Run a dry-run and review the CSV report.
+3. Run with `--execute --yes` only after the planned delete list is correct.
+
+Commands:
+
+```powershell
+.\.venv\Scripts\earthengine.exe authenticate
+.\.venv\Scripts\python.exe -m swotflow.tools.delete_ee_collection_children --asset projects/YOUR_PROJECT/assets/YOUR_COLLECTION
+.\.venv\Scripts\python.exe -m swotflow.tools.delete_ee_collection_children --asset projects/YOUR_PROJECT/assets/YOUR_COLLECTION --execute --yes
+```
+
+Default behavior:
+
+- dry-run unless `--execute --yes` is provided
+- deletes child `IMAGE` assets only
+- keeps the parent ImageCollection
+- prints progress during listing and deletion
+- writes a timestamped CSV report under `reports/`
+
+Use `--count-only` from a second PowerShell window to check how many child assets currently remain. The deletion run shows a compact progress bar by default; use `--verbose` only if you want one console line per asset. Use `--limit 10` for a small deletion test before deleting thousands of assets. Use `--delete-parent` only if the parent ImageCollection itself should also be removed.
+
+## Diagnostic Storage Cleanup
+
+**Cleanup > Diagnostic Cleanup...** is separate from downstream-proof raster cleanup. Its allowlist covers only timestamped uploader `.png`/`.html` debug captures directly in `<project_root>/00_logs/upload_artifacts`, and optional `ee_ui_uploader_YYYYMMDD_HHMMSS.log` files directly in `<project_root>/00_logs`. It does not recursively delete directories or follow configured external diagnostic folders. Unknown files and nested folders are retained.
+
+These files contain debugging evidence, not authoritative completion state. Removing them does not alter SQLite, mosaic lineage, update expectations, upload events, statistics snapshots or automation checkpoints. Old log messages may still reference removed diagnostic paths; preserve the relevant diagnostics before investigating an unresolved error. Automation stage logs and run folders remain protected, including any legacy Chrome profiles inside them. Recovery and relocation backups are intentionally excluded: review them separately only after a successful continuation and a verified backup.
+
+Preview and deletion run off the Tkinter thread. The default retention is seven days, with a minimum of one day. The deletion backend rechecks project location, allowed filename/location, retention, file identity/size/timestamps, and link/hard-link status before unlinking each selected file. It acquires the project Automation lock and refuses an active preflight/run. Manual upload terminals do not share that lock, so the user must also stop them and explicitly confirm. Close old application instances before maintenance.
+
+The append-only `00_logs/diagnostic_cleanup.jsonl` records requests, deletions and failures. A request without a final result after interruption is not proof of deletion: preview again. Space totals are logical file sizes, not a disk-allocation or database-compaction guarantee. The complete user procedure is in [Optional Diagnostic Cleanup](./GETTING_STARTED.md#optional-diagnostic-cleanup).
+
+## Project Relocation And Recovery
+
+Relocation is an offline metadata operation on an already copied project, not a new processing run or an archive/export feature. The normal external-drive procedure is in [Getting Started](./GETTING_STARTED.md#move-a-project-to-another-computer).
+
+### Preserved Project Memory
+
+- SQLite remains authoritative. Relocation preserves dataset row counts, stage statuses, scientific identifiers, timestamps, processing levels, mosaic source membership/signatures, upload asset IDs, update campaigns, expected granules, and update-run IDs.
+- Archived update windows and upload-event history remain available after relocation. Completion is still derived from the expected observations and downstream evidence; changing computers does not mark an unfinished window complete.
+- Local path fields and path-based record keys are rebased together. JSON-encoded source lists, saved statistics, per-tile YAML configurations, and automation checkpoints are included. Known CSV exports are refreshed from SQLite so an old disk snapshot cannot restore stale upload statuses.
+- Completed automation stage results remain recorded. Saved `preflight_ok` flags are invalidated: paths, GDAL and authentication must be checked on the destination before continuing. Fresh preflight uses the preserved project memory; no force-reprocessing or download-history reset is performed.
+- Raw files already extracted, extracts already used/excluded by completed mosaics, and mosaics verified as uploaded can remain absent after transfer. Recorded duplicate moves and the existing incompatible-input QA cleanup rules are also accounted for. Missing files without this proof are reported separately and block opening a relocated project until validation succeeds. No files are downloaded, processed, uploaded or deleted by relocation itself.
+- Text logs and browser debug artifacts retain their original contents as historical evidence. Runtime paths and credentials are not silently inferred from scientific file paths. Set the target computer's GDAL/Chrome configuration and authenticate there.
+
+### External Folder Mappings
+
+The original project root maps automatically to the folder containing the copied `project.yaml`, even if the original folder still exists. Additional external raster locations require explicit mappings; the tool will stop rather than leave an operational reference pointing back to another computer. In the dialog, enter one mapping per line:
+
+```text
+C:\SWOT_work\01_raw_downloads | E:\SWOT_e2e\01_raw_downloads
+C:\SWOT_work\02_extracted_geotiffs | E:\SWOT_e2e\02_extracted_geotiffs
+```
+
+Copy those external files yourself first. Keep the authoritative database at `<project_root>/swotflow.sqlite3` and the project logs under `<project_root>/00_logs`. The first implementation does not support relocating an externally stored database or log tree independently. Path matching is component-aware and accepts Windows path separators when reading a Windows-origin project; an end-to-end macOS GDAL/browser migration still requires platform testing.
+
+### Validation And Rollback
+
+Relocation creates a SQLite backup that includes committed WAL data, stages metadata changes, checks for record-key collisions and unchanged dataset counts, and retains before/after metadata under `.swotflow-relocation/<timestamp_id>`. Allow free disk space for staging: the tool checks for approximately six database sizes plus two copies of structured metadata and a reserve. This is temporary/backup storage, not duplicated raster data.
+
+While relocation is installing changes, normal project access is blocked. A handled installation error restores the pre-relocation metadata. After a power loss or forced shutdown, stop any remaining project processes and use **Restore Backup** in the dialog, then retry **Relocate Copy**. This recovery action applies to interrupted installations; it does not undo processing performed after a successful move. Keep the original untouched project until the new copy has been verified and used successfully.
+
+There is no automatic project compression/export or two-way synchronization. An optional ZIP is only a transport container: create it after all project writers stop, include the complete project, and extract it fully to the final working folder before relocation. Do not run directly inside an archive. Already-cleaned intermediate rasters need not be reconstructed for transport when downstream proof is preserved. Keep rollback/recovery folders with the copied project until the destination has been checked.
+
+The full validation summary is in `00_logs/relocation_validation.json`, with issue counts and up to 500 example rows. It uses SQLite's structural `quick_check`, checks unchanged dataset counts and key collisions during relocation, and checks file presence/nonzero size and downstream proof. It does not perform a full SQLite index-content audit, raster checksums, pixel-level validation, an online EE inventory sync, or transfer live browser sessions. Run preflight/EE sync on the destination, then refresh Statistics and review Cleanup candidates.
+
+Command-line equivalents from the application folder, using the destination project path:
+
+```powershell
+.\.venv\Scripts\python.exe -m swotflow.project.relocation E:\SWOT_e2e --relocate --confirm-stopped
+.\.venv\Scripts\python.exe -m swotflow.project.relocation E:\SWOT_e2e
+# Only after an interrupted relocation:
+.\.venv\Scripts\python.exe -m swotflow.project.relocation E:\SWOT_e2e --restore --confirm-stopped
+```
+
+Use repeated `--map OLD_FOLDER NEW_FOLDER` arguments for external data folders. Validation exits with code `2` when file/location issues need attention and `1` for an operation error. The original project is not modified. Never work on two project copies concurrently and expect their SQLite histories to merge automatically.

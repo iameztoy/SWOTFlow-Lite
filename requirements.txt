@@ -1,0 +1,7 @@
+selenium==4.43.0
+PyYAML==6.0.3
+earthengine-api==1.7.26
+earthaccess==0.17.0
+numpy==2.4.4
+google-auth==2.52.0
+requests==2.34.2
