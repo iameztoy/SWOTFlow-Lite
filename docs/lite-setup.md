@@ -1,8 +1,27 @@
-# SWOTFlow Lite v0.1.0 — setup and workflow
+# SWOTFlow Lite v0.1.1 — setup and workflow
 
 ## First installation
 
 Use a separate application folder and a separate data project. Run Setup_SWOTFlow_Lite.ps1 in PowerShell, then Start_SWOTFlow_Lite.cmd. The launcher console is also used for memory-only NASA sign-in. Select your GDAL environment's Python executable in Project. Do not delete your project databases/logs when cleaning raster files.
+
+The application supports **64-bit Python 3.11 and 3.12**, including **3.12.10**. Tkinter and venv must be available in that Python installation. Setup preserves an existing supported app environment. On a fresh installation it checks `py -3.12`, then `py -3.11`, then `python` on PATH. It prints the version and executable selected.
+
+From the extracted Lite application folder, run:
+
+```powershell
+.\Setup_SWOTFlow_Lite.ps1
+.\Start_SWOTFlow_Lite.cmd
+```
+
+If several Python installations exist, or the Windows launcher does not find yours, specify your actual executable path:
+
+```powershell
+.\Setup_SWOTFlow_Lite.ps1 -PythonPath 'C:\path\to\Python312\python.exe'
+```
+
+Use `-CheckOnly` with either setup command to check without installing dependencies. Setup does not silently replace an existing `.venv` with a different interpreter. To switch interpreters, close Lite, extract the release into a fresh application folder, and run setup there; keep the external data project and its history. Do not copy `.venv` between computers. Follow your organisation's software and PowerShell execution policies.
+
+**GDAL is separate:** Python 3.12 runs the interface, NASA catalogue/download and Cloud upload components. Extraction and mosaicking use the GDAL Python executable selected in Project; an existing validated GDAL environment on Python 3.11 can stay on 3.11. Do not point the GDAL field at a plain Python 3.12 installation without GDAL and the NetCDF driver. Setup does not alter that processing environment.
 
 For Google project registration, billing, private Standard bucket permissions, disabled soft delete/versioning for disposable staging, and Application Default Credentials, follow [the Google Cloud setup guide](cloud-upload-setup.md), steps 1–7. ChromeDriver is not used. Browser proxy sign-in and Python API access are separate; test workplace policy/access before large transfers. If necessary, control ingestion from another approved network while manually uploading at work.
 

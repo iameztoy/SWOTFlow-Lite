@@ -1,4 +1,12 @@
-# SWOTFlow Lite v0.1.0 validation
+# SWOTFlow Lite validation
+
+## v0.1.1 — Python 3.12.10 compatibility
+
+Validated on Windows using a clean **64-bit CPython 3.12.10** installation and the actual PowerShell installer. All pinned dependencies installed; `pip check` and application imports passed. The full suite ran **818 tests: 813 passed, five skipped** (the same optional browser, symlink and in-process GDAL checks described below). GDAL subprocess tests used the existing separate Python 3.11 GDAL/NetCDF environment. Installer preservation tests also passed under the existing Python 3.11 app environment.
+
+Additional checks exercised launcher discovery, explicit executable selection, fallback to `python` on PATH without the launcher, non-mutating checks, and refusal to replace an environment belonging to another interpreter. Read-only live service checks found seven preferred NASA originals for one UTM/date and confirmed bucket and EE collection access. No files were downloaded/uploaded and no assets were changed in this compatibility test. Workplace proxy policies remain a separate environment constraint.
+
+## v0.1.0 — workflow acceptance
 
 Validated on Windows on 26 November 2026. This is a small acceptance test, not continent-wide certification.
 

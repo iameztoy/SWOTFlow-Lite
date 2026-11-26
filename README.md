@@ -1,4 +1,4 @@
-# SWOTFlow Lite v0.1.0
+# SWOTFlow Lite v0.1.1
 
 A separate, four-tab desktop application for native 100 m SWOT processing and ordinary Earth Engine ingestion through Google Cloud Storage. GeeUp remains a separate application.
 
@@ -11,11 +11,13 @@ NASA catalogue snapshots, preferred-version selection, downloaded filenames, sou
 
 ## Start on Windows
 
-1. Install Python 3.11 and your approved GDAL/NetCDF environment. Existing GeeUp GDAL environments can be selected; the apps have separate Python environments.
+1. Use approved **64-bit Python 3.11 or 3.12** (including 3.12.10) with Tkinter, and your separate GDAL/NetCDF environment. The app and GDAL Python versions do not need to match.
 2. Run `Setup_SWOTFlow_Lite.ps1` from PowerShell. Respect your organisation's software/network policies.
 3. Open `Start_SWOTFlow_Lite.cmd`. Keep its console available for NASA sign-in.
 4. Create a **new Lite project outside the application folder**, set UTM tiles, dates, GDAL Python and Cloud destination.
 5. Use **Authenticate NASA**, **Catalogue / plan**, then **Start / Resume**. Review the plan before a large run.
+
+Setup preserves an existing supported `.venv`. For a fresh installation it tries Python 3.12, then 3.11 through the Windows launcher, then `python` on PATH. To choose explicitly, run `./Setup_SWOTFlow_Lite.ps1 -PythonPath 'C:\path\to\Python312\python.exe'`. Add `-CheckOnly` to check compatibility without installing anything. Do not copy another computer's `.venv`; create it on the destination computer.
 
 Follow [the Lite setup/workflow guide](docs/lite-setup.md), including Google billing/ADC setup. No bucket, collection or paid run is created just by opening the app. Existing GeeUp projects are not silently migrated.
 
@@ -43,5 +45,7 @@ Only one controller may operate on a project at a time. Back up project database
 ## Validation
 
 Application regression tests live in `tests`. One-off pilots, downloaded files, reports, credentials and personal settings do not belong in this repository. Release notes distinguish offline checks, live pilot evidence and remaining workplace proxy/throughput testing.
+
+Python **3.12.10** clean installation, GUI/imports and the full regression suite were checked for v0.1.1: **813 passed, five skipped**. Read-only NASA, Cloud Storage and EE checks also passed. See [compatibility validation](docs/lite-validation.md).
 
 See [v0.1.0 validation](docs/lite-validation.md): 809 passing regression tests, five skips (the GDAL source oracle passed separately), and two live mosaics with exact agreement in the sampled elevation/quality/masks. Both upload routes, cleanup and Resume were checked in one project. The manual browser transfer was emulated; workplace connectivity remains to be tested.
