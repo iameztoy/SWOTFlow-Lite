@@ -20,6 +20,7 @@ from swotflow_lite import project as model, planner, runner, statistics
 from swotflow_lite.tile_selection import ContinentPicker, TileMapDialog, combine_continents
 from swotflow_lite.statistics_ui import StatisticsPanel
 from swotflow_lite.statistics_details import requested_scope, nasa_search_details, export_statistics
+from swotflow_lite.grouping import LABELS, EXACT
 
 
 class LiteApp:
@@ -86,16 +87,21 @@ class LiteApp:
         self.entry("Project",6,"end","Last acquisition date (YYYY-MM-DD)")
         self.entry("Project",7,"gdal","GDAL Python executable")
         ttk.Button(f,text="Browse GDAL Python",command=self.choose_gdal).grid(row=8,column=1,sticky="w")
-        ttk.Label(f,text="Native 100 m, exact UTM tiles. Lowest quality code selects the paired elevation/quality; deterministic ties. "
+        self.vars['grouping']=tk.StringVar(value=next(iter(LABELS)))
+        ttk.Label(f,text="Mosaic grouping").grid(row=9,column=0,sticky="w",pady=6)
+        ttk.Combobox(f,textvariable=self.vars['grouping'],values=list(LABELS),state='readonly',width=62).grid(row=9,column=1,sticky='ew')
+        ttk.Label(f,text="Native 100 m, no reprojection. Optional hemisphere grouping combines selected latitude-band tiles within the same UTM zone, "
+                  "UTC date, cycle and pass, separately north/south. Choose before your first Catalogue / plan. Grouped batches may need more disk space. "
+                  "Lowest quality code selects the paired elevation/quality; deterministic ties. "
                   "Preferred NASA versions and full filename history are retained. Map boundaries are for selection only; the processing grid stays unchanged.",
-                  wraplength=950).grid(row=9,column=0,columnspan=2,sticky="w",pady=18)
-        self.entry("Project",10,"destination","EE ImageCollection ID")
-        self.entry("Project",11,"cloud_project","Google Cloud project ID")
-        self.entry("Project",12,"bucket","Bucket name (without gs://)")
+                  wraplength=950).grid(row=10,column=0,columnspan=2,sticky="w",pady=18)
+        self.entry("Project",11,"destination","EE ImageCollection ID")
+        self.entry("Project",12,"cloud_project","Google Cloud project ID")
+        self.entry("Project",13,"bucket","Bucket name (without gs://)")
         ttk.Label(f,text="Use a new empty EE collection for a new Lite project. To add tiles or dates to an existing collection, "
                   "reopen its original project and history. Keep automatic and manual upload routes in that same project. "
                   "Assets without recorded source history prevent safe local cleanup.",
-                  wraplength=950).grid(row=13,column=0,columnspan=2,sticky="w",pady=12)
+                  wraplength=950).grid(row=14,column=0,columnspan=2,sticky="w",pady=12)
 
     def update_tile_count(self) -> None:
         try:self.tile_count.set(f"{len(normalize_utm_tiles(self.vars['tiles'].get()))} tiles selected")
@@ -190,6 +196,7 @@ class LiteApp:
             "transfers":cloud.get("concurrent_uploads",2),"ingestions":c["upload"].get("max_active_ingestions",2),"staging_gib":cloud.get("staging_limit_gib",3),"prefix":cloud.get("prefix","swotflow-lite"),
             "download_threads":c["download"]["threads"],"download_batch":c["download"]["batch_size"],"extract_workers":c["extract"]["workers"],"mosaic_workers":c["mosaic"]["workers"]}
         values.update({k:l[k] for k in ("batch_mosaics","batch_source_gib","max_prepared_gib","min_free_gib")})
+        values['grouping']=next(label for label,mode in LABELS.items() if mode==c['mosaic'].get('grouping_mode',EXACT))
         for k,v in values.items():self.vars[k].set(str(v))
         self.continents.reset()
         self.vars["manual_plan"].set(""); self.mode.set(l["mode"])
@@ -204,6 +211,10 @@ class LiteApp:
         if not self.project:return False
         try:
             c=deepcopy(self.project.config);v={k:x.get().strip() for k,x in self.vars.items()}
+            grouping=LABELS[v['grouping']]
+            if grouping!=c['mosaic'].get('grouping_mode',EXACT) and (self.project.root/'00_logs/lite_plan.json').exists():
+                raise ValueError('Choose mosaic grouping before the first Catalogue / plan. Use a separate project and collection to change an existing planned workflow; its history remains unchanged.')
+            c['mosaic']['grouping_mode']=grouping
             c["download"].update(utm_tiles=normalize_utm_tiles(v["tiles"]),start_date=v["start"],end_date=v["end"],threads=int(v["download_threads"]),batch_size=int(v["download_batch"]))
             c["extract"]["workers"]=int(v["extract_workers"]);c["mosaic"]["workers"]=int(v["mosaic_workers"])
             c["gdal"]["python"]=v["gdal"];c["destination_parent"]=v["destination"]

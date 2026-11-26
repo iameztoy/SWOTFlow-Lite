@@ -1,5 +1,13 @@
 # Release history
 
+## v0.4.0 — 26 November 2026
+
+- Add optional native UTM zone/hemisphere grouping in Project; tile-by-tile stays the default. Reuse the full engine's UTMxxN/UTMxxS naming, 100 m grids, separate UTC dates/cycles/passes and paired lowest-quality selection.
+- Plan/query all contributing selected bands together before mosaicking. Keep whole-day batches, disk reserves, exact catalogue membership, guarded cleanup and durable interruption/Resume checkpoints, including switching from local preparation to automatic Cloud transfer.
+- Attribute Statistics, upload filtering and source history to the actual original latitude bands, not the output hemisphere suffix. Show planned asset reduction; add grouped source-tile metadata to both Cloud routes.
+- Reject silent grouping changes or additions that would alter already-started mosaics. Preserve existing plans/assets for explicit replacement review.
+- Validate north/south real-GDAL fixtures against the original-source pixel oracle, interruption/resume and cleanup, plus planning, metadata, Cloud recovery and Statistics regressions. No live NASA download or Cloud/EE mutation is needed for these checks. See docs/lite-validation.md for counts and limits.
+
 ## v0.3.0 — 26 November 2026
 
 - Restore full Statistics categories in Lite: tile/year completion, dates, processing versions, exact file histories, source lineage, mosaics, uploads, NASA searches, run/update history, storage and cleanup. Retain all table rows instead of the older preview caps.

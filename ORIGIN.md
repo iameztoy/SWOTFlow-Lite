@@ -26,3 +26,11 @@ collector; its default behavior remains compatible. The Lite interface reads
 those tables alongside its own batch, Cloud and NASA histories. Full-period tile
 completion and display refresh are Lite-specific; source processing, upload,
 cleanup and Resume implementations remain inherited.
+
+Lite v0.4.0 exposes the inherited native zone/hemisphere mosaic algorithm through
+a Lite-specific multi-band batch scheduler. It calls the same download,
+duplicate-selection, extraction, mosaic, upload and guarded-cleanup stage engines;
+it does not alter their scientific pixel algorithm. The inherited upload filter now
+uses known original source tiles instead of guessing them from a grouped output's
+N/S suffix. Grouped Cloud manifests also identify the grouping mode and source
+tiles. The original GeeUp repository/installation is unchanged.

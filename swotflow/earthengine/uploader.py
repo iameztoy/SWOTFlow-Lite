@@ -2231,7 +2231,9 @@ class EarthEngineUIUploader:
             item.source_utm_tiles = source_tiles_from_file_name(item.local_file)
         manifest_tiles = self.lookup_mosaic_source_tiles(item.local_file, source_tile_lookup)
         if manifest_tiles:
-            item.source_utm_tiles = sorted(set(item.source_utm_tiles).union(manifest_tiles))
+            # A grouped output's N/S is a hemisphere, not a latitude-band input.
+            # Recorded inputs are authoritative; the output name is only a fallback.
+            item.source_utm_tiles = sorted(set(manifest_tiles))
 
         if self.config.upload.scope == UPLOAD_SCOPE_ALL:
             item.upload_selected = True

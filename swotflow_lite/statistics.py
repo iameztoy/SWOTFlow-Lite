@@ -5,6 +5,7 @@ import json
 from swotflow.project.insights import collect_project_insights
 from swotflow_lite.runner import verified_source_evidence, batch_verified, cloud_rows
 from swotflow_lite.statistics_details import collect_details
+from swotflow_lite.grouping import batch_tiles, input_groups, EXACT
 
 
 def collection_lineage(project: object) -> dict:
@@ -74,6 +75,7 @@ def snapshot(project: object) -> dict:
         if state == "ee_verified" and count != len(batch["expected"]):
             state = "ee_pending"
         rows.append({"id": batch["id"], "tile": batch["tile"], "start": batch["start"], "end": batch["end"],
+                     "source_tiles":batch_tiles(batch), "grouping":batch.get('grouping_mode',EXACT),
                      "expected":len(batch["expected"]), "verified": count, "state": state, "detail":batch.get("detail", "")})
     expected = {k:v for b in plan.get("batches", []) for k,v in b["expected"].items()}
     verified = sum(represented.get(k) == v for k,v in expected.items())
@@ -85,6 +87,11 @@ def snapshot(project: object) -> dict:
                "Lite collection assets with unresolved source lineage":str(len(lineage["unresolved_assets"])),
                "Lite collection conflicting acquisition ownership":str(len(lineage["conflicts"])),
                "Lite plan scope":str(plan.get("scope", "Not planned")), **metrics}
+    exact_count=len(input_groups(expected,EXACT)) if expected else 0
+    grouped_count=sum(b.get('groups',len(input_groups(b['expected'],b.get('grouping_mode',EXACT)))) for b in plan.get('batches',[]))
+    metrics.update({'Lite planned mosaics':str(grouped_count),
+                    'Lite mosaics with tile-by-tile grouping':str(exact_count),
+                    'Lite planned asset reduction from grouping':str(exact_count-grouped_count)})
     cloud = cloud_rows(project)
     manual = [r for r in cloud if r.get("manual_import")]
     metrics.update({

@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>SWOTFlow Lite v0.3.0 setup</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;color:#163047}pre{white-space:pre-wrap;font:inherit}a{color:#12608a}</style><h1>SWOTFlow Lite v0.3.0</h1><p><a href="cloud-upload-setup.html">Google Cloud setup: billing, bucket and sign-in</a></p><pre># SWOTFlow Lite v0.3.0 — setup and workflow
+<!doctype html><html lang="en"><meta charset="utf-8"><title>SWOTFlow Lite v0.4.0 setup</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;color:#163047}pre{white-space:pre-wrap;font:inherit}a{color:#12608a}</style><h1>SWOTFlow Lite v0.4.0</h1><p><a href="cloud-upload-setup.html">Google Cloud setup: billing, bucket and sign-in</a></p><pre># SWOTFlow Lite v0.4.0 — setup and workflow
 
 ## First installation
 
@@ -32,7 +32,7 @@ Use a **new empty collection for a new Lite project**. To extend an existing col
 ## Project and plan
 
 1. New project: choose a separate data folder; all downloaded, extracted, mosaic, log and history paths are created under it.
-2. Select UTM tiles, full acquisition date range, GDAL Python, Cloud project, bucket and EE ImageCollection ID. Use the comma-separated tile field, **Select on map…**, or check multiple continents and **Add checked continents**. **Use only checked continents** explicitly replaces the list. Native 100 m exact UTM grids are fixed in this release.
+2. Select UTM tiles, full acquisition date range, GDAL Python, Cloud project, bucket and EE ImageCollection ID. Use the comma-separated tile field, **Select on map…**, or check multiple continents and **Add checked continents**. **Use only checked continents** explicitly replaces the list. Leave **Mosaic grouping** at **Tile by tile (default)**, or choose the native zone/hemisphere option before the first plan.
 3. Process: select Prepare locally or Fully automatic. Set complete-mosaic/source-byte batch targets, disk reserve and prepared-mosaic limit. Download network batches are a separate setting.
 4. Authenticate NASA in the launch console. Credentials are not saved by Lite.
 5. Catalogue / plan queries both official NASA catalogues and records every candidate and preferred-version selection. Review the expected batches. Refresh the plan when extending dates/tiles or reconciling publication changes.
@@ -45,6 +45,20 @@ The map opens from Project and works offline. Click a tile to toggle it; use the
 Select several continent checkboxes before adding them. Overlapping presets are deduplicated. The checkboxes choose which presets to add; the tile field/map shows the actual selection, which can then be adjusted manually. Apply selection commits map edits to the field; Cancel discards them. Save settings persists the list. Open/New resets the preset checkboxes without changing the saved tile list.
 
 The map is a longitude/latitude reference view, covering the UTM range from 80°S to 84°N. Country boundaries are low-resolution Natural Earth references, not authoritative administrative limits. Blue indicates selected scope only. A preset includes intersecting grid cells and may include areas without NASA acquisitions. Refresh **Catalogue / plan** after changing scope. Existing project history is retained, and active workers keep their original frozen settings. Selection does not change extraction, mosaicking, metadata, cleanup or Statistics rules.
+
+## Optional native zone/hemisphere mosaics
+
+In **Project → Mosaic grouping**, choose **Original projection / group UTM latitude bands by hemisphere** before running Catalogue / plan. All selected latitude-band tiles in the same numbered zone and hemisphere are collected together. A group/year is processed in bounded batches; a complete UTC start-date is never split to meet a size target. Different cycles and passes stay separate. Northern and southern inputs never share an output, and different UTM zones never share an output. No resampling or reprojection is added.
+
+For example, selected UTM36N, UTM36P and UTM36Q inputs can produce one `UTM36N` mosaic for a date/cycle/pass; UTM36L and UTM36M can produce a separate `UTM36S` mosaic. This reuses the full application&#x27;s naming convention. In an **output**, N/S indicates hemisphere; in an **original source filename**, the final letter is a latitude band (source UTM36S is north of the equator). Cloud metadata records the grouping mode and original source tiles; full filenames, versions, checksums and acquisition intervals stay in project history.
+
+Grouping uses your selected area only. To request a complete zone, select all its bands using **Select on map → Add zone → North, South or Both**. NASA catalogue checks establish which preferred inputs are available. A complete catalogue/file set does not promise gap-free satellite coverage or valid data in every pixel.
+
+Grouped mosaics work with both transfer routes. Extraction completes for all members before mosaicking, and extracted cleanup requires complete date/pass source membership. Raw cleanup retains its verified-extraction check; local mosaic cleanup still requires confirmed EE ingestion and matching provenance. Resume reuses the same local checkpoint when switching from Prepare locally to Fully automatic. Failed or incomplete outputs are retained. Larger grouped days may exceed the storage limit: increase it explicitly or choose a smaller area before planning; the app will not silently split that day.
+
+Statistics retains the original tile/year/source counts and shows planned mosaic count, tile-by-tile count and the difference in asset count. One grouped asset may contribute to several tiles; it is one asset, not several uploads. Each tile must still satisfy its full requested date range before it is finished.
+
+Choose grouping before the first plan. Existing planned projects retain their mode. New dates/unrelated groups can be added with a refreshed plan, but adding a band or changed source that alters an already-started mosaic is blocked. Such a change needs a reviewed replacement in a separate project/collection; this release does not silently overwrite or rebuild earlier grouped assets. The old plan and assets are kept intact.
 
 ## Fully automatic route
 

@@ -1,4 +1,4 @@
-# SWOTFlow Lite v0.3.0
+# SWOTFlow Lite v0.4.0
 
 A separate, four-tab desktop application for native 100 m SWOT processing and ordinary Earth Engine ingestion through Google Cloud Storage. GeeUp remains a separate application.
 
@@ -42,7 +42,13 @@ The offline map uses the existing bundled UTM grid and continent presets, plus p
 
 ## Processing scope
 
-The simplified UI supports native 100 m **exact UTM tiles** and deterministic lowest-quality-code mosaicking. It does not expose browser automation, reprojection or cross-zone EE consolidation. Compatibility modules remain internally to preserve tested science/history contracts; Lite never starts ChromeDriver.
+**Project → Mosaic grouping** defaults to **Tile by tile**. The optional **Original projection / group UTM latitude bands by hemisphere** combines the selected latitude-band tiles within each numbered UTM zone and hemisphere, separately for each UTC acquisition-start date, cycle and pass. Outputs use the full app's `UTM36N` / `UTM36S` convention (north/south); their original source bands remain recorded. No reprojection is performed: north uses EPSG:326xx and south EPSG:327xx, at 100 m. Lowest-quality-code selection keeps elevation and quality paired.
+
+Select the mode before the first Catalogue / plan. To cover a whole zone, select its bands with **Select on map → Add zone**; grouping alone does not expand the chosen area. All contributing bands are collected before each mosaic, with whole-day batch boundaries and disk checks. Both automatic and manual Cloud routes use the grouped mosaics. Statistics shows expected asset reduction and attributes source coverage to the original tiles.
+
+An existing plan's grouping cannot be silently changed. Adding new dates or unrelated groups is supported; adding bands or revised sources to an already-started date/pass group requires a reviewed replacement in a separate project/collection. The app blocks that change without replacing the old plan or assets. This release does not automatically rebuild existing grouped assets.
+
+The simplified UI does not expose browser automation, reprojection or cross-zone EE consolidation. Compatibility modules remain internally to preserve tested science/history contracts; Lite never starts ChromeDriver.
 
 Statistics restores the full engine's detailed information: **finished/pending tiles and years, status map and plots, download/extraction filenames, source-to-mosaic lineage, processing versions, mosaics, upload outcomes, NASA search/version history, update/run history, disk usage and cleanup**. The two menus choose a category and table. Search, both scrollbars, full-row details and CSV/JSON exports keep every row available, including histories larger than the old preview limits.
 

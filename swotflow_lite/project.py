@@ -92,8 +92,8 @@ def validate(config: dict, *, cloud: bool = False) -> None:
             raise ValueError(key + " must be a positive, finite GiB value.")
     if settings["mode"] not in {"prepare", "automatic"}:
         raise ValueError("Select Prepare locally or Fully automatic.")
-    if config["extract"].get("target_crs_mode") != "original" or config["mosaic"].get("grouping_mode") != "utm_zone":
-        raise ValueError("Lite v0.1 uses native 100 m exact UTM tiles. Changed projection/grouping requires a new supported workflow.")
+    if config["extract"].get("target_crs_mode") != "original" or config["mosaic"].get("grouping_mode") not in {"utm_zone", "utm_zone_hemisphere"}:
+        raise ValueError("Lite supports original 100 m grids: exact tiles or UTM zone/hemisphere groups.")
     if not Path(config["gdal"]["python"]).is_file():
         raise ValueError("Select the Python executable in your GDAL environment.")
     if cloud:

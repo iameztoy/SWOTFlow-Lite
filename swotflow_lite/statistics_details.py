@@ -14,6 +14,7 @@ from swotflow.core.metadata import parse_swot_l2_hr_raster_metadata
 from swotflow.project.insights import ProjectInsights, project_insights_snapshot
 from swotflow_lite.planner import science_identity
 from swotflow_lite.project import write_json
+from swotflow_lite.grouping import batch_tiles, tile_inputs
 
 
 def requested_scope(config: dict) -> dict:
@@ -43,15 +44,15 @@ def period_rows(project: object, plan: dict, represented: dict, lineage: dict) -
     for scan in plan.get("scans", []):
         scans[(scan["tile"], scan["start"], scan["end"])].append(scan)
     for tile in dict.fromkeys(scope["tiles"]):
-        batch_rows = [b for b in plan.get("batches", []) if b["tile"] == tile]
-        expected = {k:v for b in batch_rows for k,v in b["expected"].items()}
+        batch_rows = [b for b in plan.get("batches", []) if tile in batch_tiles(b) and tile_inputs(b,tile)]
+        expected = {k:v for b in batch_rows for k,v in tile_inputs(b,tile).items()}
         count = sum(represented.get(k) == v for k,v in expected.items())
         checked, no_data, window_inputs = 0, 0, 0
         for year in years:
             first, last = max(scope["start"], f"{year}-01-01"), min(scope["end"], f"{year}-12-31")
             entries = scans.get((tile, first, last), [])
             batches = [b for b in batch_rows if first <= b["start"] <= b["end"] <= last]
-            sources = {k:v for b in batches for k,v in b["expected"].items()}
+            sources = {k:v for b in batches for k,v in tile_inputs(b,tile).items()}
             window_inputs += len(sources)
             verified = sum(represented.get(k) == v for k,v in sources.items())
             valid = current and len(entries) == 1 and entries[0].get("preferred_files") == len(sources)
@@ -64,7 +65,7 @@ def period_rows(project: object, plan: dict, represented: dict, lineage: dict) -
                             "scan_id":entries[0].get("scan_id", "") if len(entries)==1 else ""})
         states = {b.get("state", "pending") for b in batch_rows}
         checked_all = (bool(years) and checked == len(years) and window_inputs == len(expected)
-                       and sum(len(b["expected"]) for b in batch_rows) == len(expected))
+                       and sum(len(tile_inputs(b,tile)) for b in batch_rows) == len(expected))
         if not current or not checked_all:
             state = "plan_required"
         elif not expected:
@@ -89,8 +90,8 @@ def period_rows(project: object, plan: dict, represented: dict, lineage: dict) -
         tiles.append({"tile":tile, "start":scope["start"], "end":scope["end"], "state":state,
                       "expected":len(expected), "verified":count, "pending":len(expected)-count,
                       "years_checked":checked, "years_requested":len(years), "years_without_acquisitions":no_data,
-                      "batches":len(batch_rows), "verified_batches":sum(bool(b["expected"]) and
-                          all(represented.get(k)==v for k,v in b["expected"].items()) for b in batch_rows)})
+                      "batches":len(batch_rows), "verified_batches":sum(bool(tile_inputs(b,tile)) and
+                          all(represented.get(k)==v for k,v in tile_inputs(b,tile).items()) for b in batch_rows)})
     return tiles, windows
 
 
@@ -179,7 +180,7 @@ def input_rows(plan: dict, represented: dict, history: dict) -> list[dict]:
             fields = parsed.fields if parsed else {}
             downloaded = downloads.get(canonical_name(filename), {})
             extracted = extracts.get(canonical_name(filename), {})
-            rows.append({"filename":filename, "tile":batch["tile"], "batch":batch["id"],
+            rows.append({"filename":filename, "tile":fields.get('coordinate_system',batch['tile']), "batch":batch["id"],
                 "crid":fields.get("crid", ""), "counter":fields.get("product_counter", ""),
                 "start":fields.get("range_beginning", ""), "end":fields.get("range_ending", ""),
                 "ee_verified":represented.get(filename)==checksum, "checksum":checksum,

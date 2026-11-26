@@ -14,6 +14,8 @@ from swotflow.core.metadata import parse_swot_l2_hr_raster_metadata
 from swotflow.catalog.history import CatalogHistory
 from swotflow.verification.pipeline import expected_checksum, product_name
 from swotflow_lite.project import write_json, validate, lite_lock
+from swotflow_lite.grouping import EXACT, HEMISPHERE, scope_groups, source_tile, protect_started_groups
+from swotflow.processing.mosaic import MosaicConfig, group_key
 
 
 def science_identity(config: dict) -> str:
@@ -27,22 +29,27 @@ def science_identity(config: dict) -> str:
 
 
 def group_batches(granules: list[DownloadGranule], *, target: int, source_gib: float,
-                  expected: dict[str, dict]) -> list[dict]:
+                  expected: dict[str, dict], grouping_mode: str = EXACT) -> list[dict]:
     """Accumulate whole acquisition days; a larger day is explicitly oversized.
 
     Day boundaries preserve all cycle/pass/descriptor groups, including overlaps.
     The byte value is provider source volume, not a claim about TIFF expansion.
     """
     days: dict[str, list] = defaultdict(list)
+    grouping = MosaicConfig(Path('.'), Path('.'), grouping_mode=grouping_mode)
+    grids = set()
     for granule in granules:
         parsed = parse_swot_l2_hr_raster_metadata(granule.file_name)
         if not parsed or not expected.get(product_name(granule.file_name), {}).get("hash"):
             raise ValueError("Missing filename/provider checksum evidence: " + granule.file_name)
         fields = parsed.fields
-        key = (fields["descriptor"], fields["cycle_id"], fields["pass_id"], fields["range_beginning"][:8])
+        key = group_key(parsed, grouping)
+        grids.add(key.coordinate_system)
         stamp = fields["range_beginning"][:8]
         day = date(int(stamp[:4]), int(stamp[4:6]), int(stamp[6:8])).isoformat()
         days[day].append((granule, key))
+    if len(grids) > 1:
+        raise ValueError("A Lite batch must stay within one native tile or zone/hemisphere.")
     result: list[dict] = []
     active: list = []
 
@@ -54,8 +61,9 @@ def group_batches(granules: list[DownloadGranule], *, target: int, source_gib: f
         volume = sum(v["size"] for v in checksums.values())
         groups = len({key for _, _, key in active})
         identity = hashlib.sha256(json.dumps(checksums, sort_keys=True).encode()).hexdigest()[:16]
-        result.append({"id": active[0][1].utm_tile + "_" + active[0][0] + "_" + identity,
-                       "tile": active[0][1].utm_tile, "start": active[0][0], "end": active[-1][0],
+        token = active[0][2].coordinate_system
+        result.append({"id": token + "_" + active[0][0] + "_" + identity,
+                       "tile": token, "start": active[0][0], "end": active[-1][0],
                        "expected": checksums, "groups": groups, "source_bytes": volume,
                        "oversized_day": volume > source_gib * 2**30 or groups > target,
                        "state": "pending", "detail": ""})
@@ -91,29 +99,37 @@ def _build_plan(project: object, progress: Callable[[str], None]) -> dict:
     prior = {b["id"]: b for b in old.get("batches", [])}
     batches, scans = [], []
     first, last = config["download"]["start_date"], config["download"]["end_date"]
-    for tile in config["download"]["utm_tiles"]:
+    grouping_mode = config["mosaic"].get("grouping_mode", EXACT)
+    for token, tiles in scope_groups(config).items():
         for year in range(int(first[:4]), int(last[:4]) + 1):
             start, end = max(first, f"{year}-01-01"), min(last, f"{year}-12-31")
             scope = deepcopy(config)
-            scope["download"].update(start_date=start, end_date=end, utm_tiles=[tile],
+            scope["download"].update(start_date=start, end_date=end, utm_tiles=tiles,
                                      acquisition_start_date=start, acquisition_end_date=end)
-            progress(f"NASA catalogue: {tile}, {start} to {end}")
+            progress(f"NASA catalogue: {token} ({', '.join(tiles)}), {start} to {end}")
             preview = build_download_preview(parse_config(scope, root))
             snapshot = CatalogHistory(root/"00_logs/nasa_catalog_history.sqlite3").snapshot(preview.history_scan_id)
             if snapshot["status"] != "complete":
                 raise ValueError("NASA search is incomplete; no processing plan was replaced.")
             expected = {product_name(c["filename"]): expected_checksum(c) for c in snapshot["candidates"]}
             current = group_batches(preview.selected_granules, target=config["lite"]["batch_mosaics"],
-                                    source_gib=config["lite"]["batch_source_gib"], expected=expected)
+                                    source_gib=config["lite"]["batch_source_gib"], expected=expected,
+                                    grouping_mode=grouping_mode)
             for batch in current:
                 batch["scan_id"] = preview.history_scan_id
+                if grouping_mode == HEMISPHERE:
+                    batch.update(tiles=list(tiles), grouping_mode=grouping_mode)
                 if batch["id"] in prior:
                     for k in ("state", "detail", "run_mode", "run_dir"):
                         if k in prior[batch["id"]]:
                             batch[k] = prior[batch["id"]][k]
                 batches.append(batch)
-            scans.append({"tile": tile, "start": start, "end": end, "scan_id": preview.history_scan_id,
-                          "preferred_files": len(preview.selected_granules), "all_candidates": len(preview.granules)})
+            for tile in tiles:
+                scans.append({"tile": tile, "start": start, "end": end, "scan_id": preview.history_scan_id,
+                              "preferred_files": sum(source_tile(g.file_name)==tile for g in preview.selected_granules),
+                              "all_candidates": sum(source_tile(g.file_name)==tile for g in preview.granules)})
+    if grouping_mode == HEMISPHERE:
+        protect_started_groups(old, batches)
     plan = {"schema_version": 1, "science": signature,
             "scope": {"tiles": list(config["download"]["utm_tiles"]), "start": first, "end": last},
             "scans": scans, "batches": batches}

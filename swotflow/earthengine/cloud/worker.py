@@ -1,5 +1,6 @@
 """Continuous optional Cloud uploader using the existing planning/report contract."""
 from pathlib import Path
+import json
 import time
 import uuid
 from swotflow.earthengine.uploader import EarthEngineUIUploader, UploadItem, now_iso
@@ -119,7 +120,16 @@ class CloudUploader(EarthEngineUIUploader):
                "source_utm_tiles": item.source_utm_tiles, "output_grid": item.output_grid,
                "product_identity": item.product_identity, "processing_level": item.processing_level,
                "created_at": utc(), "report": self.make_report_row(item, "", "", "PLANNED_UPLOAD", "")}
-        row["manifest"] = build_manifest(self.config, item, self.parse_metadata_for_item(item, required=True), row)
+        metadata = self.parse_metadata_for_item(item, required=True)
+        if proof.get('settings',{}).get('grouping_mode') == 'utm_zone_hemisphere':
+            from swotflow.core.metadata import parse_swot_l2_hr_raster_metadata
+            parsed_sources=[parse_swot_l2_hr_raster_metadata(name) for name in proof['sources']]
+            if not parsed_sources or any(p is None for p in parsed_sources):
+                raise ValueError('Grouped Cloud upload requires recognised original source filenames.')
+            tiles=sorted({p.fields['coordinate_system'] for p in parsed_sources})
+            metadata.properties.update(swot_mosaic_grouping='utm_zone_hemisphere',
+                swot_source_utm_tiles=json.dumps(tiles))
+        row["manifest"] = build_manifest(self.config, item, metadata, row)
         self.save(row)
         return row
 

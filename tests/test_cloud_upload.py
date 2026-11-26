@@ -113,6 +113,33 @@ class CloudWorkflowTests(unittest.TestCase):
         row=self.prepare()
         self.assertEqual([b['pyramidingPolicy'] for b in row['manifest']['bands']],['MEAN','SAMPLE'])
 
+    def test_grouped_source_tiles_override_ambiguous_output_hemisphere(self):
+        item=UploadItem(self.path.with_name(NAME.replace('UTM35L','UTM35S')),'grouped','grouped')
+        self.worker.config.upload.scope='selected_utm'
+        self.worker.config.upload.utm_tiles=['UTM35S']
+        lookup={item.local_file.name:['UTM35L','UTM35M']}
+        self.worker.apply_upload_filter_metadata(item,lookup)
+        self.assertEqual(item.source_utm_tiles,['UTM35L','UTM35M'])
+        self.assertFalse(item.upload_selected)
+        self.worker.config.upload.utm_tiles=['UTM35M']
+        self.worker.apply_upload_filter_metadata(item,lookup)
+        self.assertTrue(item.upload_selected)
+
+    def test_grouped_cloud_metadata_keeps_exact_sources_and_native_grid(self):
+        from tests.test_lite_grouping import name
+        self.proof['settings']={'grouping_mode':'utm_zone_hemisphere'}
+        self.proof['sources']={name(t):{'algorithm':'md5','hash':t} for t in ('UTM35L','UTM35M')}
+        with self.worker.store.connection(True) as db:
+            db.execute('INSERT INTO artifacts(path,stage,utc,payload) VALUES (?,?,?,?)',
+                (str(self.path.resolve()),'mosaic',self.proof['utc'],json.dumps(self.proof)))
+        row=self.prepare()
+        self.assertEqual(row['manifest']['properties']['swot_mosaic_grouping'],'utm_zone_hemisphere')
+        self.assertEqual(json.loads(row['manifest']['properties']['swot_source_utm_tiles']),['UTM35L','UTM35M'])
+        self.assertEqual(row['receipt']['sources'],self.proof['sources'])
+        self.assertNotIn('crs',json.dumps(row['manifest']))
+        self.complete(row)
+        self.assertEqual(self.worker.journal.get(self.item.asset_id)['state'],'VERIFIED')
+
     def test_crash_after_submission_reuses_request_id_not_a_second_ingestion(self):
         row=self.prepare(); self.transport.lost_response=True
         with self.assertRaises(RuntimeError): self.worker.advance(row)

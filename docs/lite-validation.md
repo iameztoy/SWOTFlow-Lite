@@ -1,5 +1,15 @@
 # SWOTFlow Lite validation
 
+## v0.4.0 — optional native hemisphere grouping
+
+The Windows/Python 3.11 suite ran **864 tests: 858 passed, six optional/environment skips**. Two GDAL-dependent tests (the new north/south workflow fixture and the existing source replay/injected-shift oracle) then passed separately using the configured GDAL runtime. Three inherited browser checks and the Windows symlink check remain optional. Dependencies and Python 3.11/3.12 support are unchanged. This release did not repeat the previous clean Python 3.12 installation: that temporary interpreter had been removed after its earlier compatibility test.
+
+The new fixture uses four tiny synthetic NetCDF sources with deliberate overlap and nodata: two northern latitude bands in EPSG:32636 and two southern bands in EPSG:32736. It uses the actual app extraction/mosaic executors and source oracle. Each pair becomes one 100 m mosaic, with the lower quality code selecting its accompanying elevation. The independent comparison agrees with the original arrays. The fixture interrupts after extraction, resumes without downloading again, cleans verified raw/extracted files, and resumes again without repeating scientific stages. These are synthetic code regressions, not fresh NASA data or continent-wide validation.
+
+Focused checks cover selected-band catalogue partitioning, empty bands, whole-day batching, distinct cycles/passes/dates, frozen membership, failed-search preservation, partial-group rejection, prepare-to-automatic checkpoint reuse, cleanup order, interrupted runs, original tile/year Statistics, GUI persistence, ambiguous N/S source filtering and grouped Cloud metadata. Existing automatic/manual import, ingestion failure, duplicate ownership, generation checks and cleanup tests remain passing. Cloud transport is simulated; there was no paid transfer, live NASA download or EE mutation in this release's validation.
+
+The Project selector was inspected in the desktop UI with tile-by-tile selected by default and both choices visible. Existing planned workflows cannot silently change grouping; changed membership of an already-started group requires explicit replacement review. Grouping only includes selected bands and cannot fill intrinsic source nodata. Whole grouped days can require more disk space than exact-tile batches.
+
 ## v0.3.0 — full Statistics
 
 The Windows/Python 3.11 application suite ran **847 tests: 842 passed, five existing optional/environment skips**. All 17 new Statistics regressions also passed after the final column-order adjustment. Dependencies and Python 3.11/3.12 support are unchanged; this release did not repeat the earlier clean Python 3.12 installation test.

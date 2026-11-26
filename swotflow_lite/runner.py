@@ -14,6 +14,7 @@ from swotflow.project.lock import automation_lock
 from swotflow.earthengine.cloud.journal import read_rows
 from swotflow_lite.planner import science_identity
 from swotflow_lite.project import validate, write_json, lite_lock
+from swotflow_lite.grouping import HEMISPHERE
 
 
 def cloud_rows(project: object) -> list[dict]:
@@ -164,6 +165,10 @@ def run(project: object, stop: threading.Event, progress: Callable[[str], None] 
                 continue
             mode = "automatic" if automatic else "prepare"
             folder = project.root/"00_logs/lite_runs"/batch["id"]/mode
+            if config['mosaic'].get('grouping_mode') == HEMISPHERE:
+                # Switching manual/automatic transfer must retain the same local
+                # prefix, including proof for already-cleaned originals/extracts.
+                folder = project.root/'00_logs/lite_runs'/batch['id']/'grouped'
             recovery_ready = batch["state"] == "locally_ready" or completed_local_checkpoint(folder)
             problem = "" if recovery_ready else storage_problem(project, batch)
             if problem:
@@ -187,8 +192,12 @@ def run(project: object, stop: threading.Event, progress: Callable[[str], None] 
             write_json(path, plan)
             progress(f"{batch['tile']} {batch['start']} to {batch['end']}: {len(batch['expected'])} originals, about {batch['groups']} mosaics")
             try:
-                state = engine.run_automation(automation, preflight_state=previous, stop_event=stop,
-                    progress_callback=lambda tile, stage, status, message: progress(f"{tile} / {stage}: {message}"))
+                if config['mosaic'].get('grouping_mode') == HEMISPHERE:
+                    from swotflow_lite.grouped_runner import run_group_batch
+                    state = run_group_batch(project,batch,folder,automatic,stop,progress)
+                else:
+                    state = engine.run_automation(automation, preflight_state=previous, stop_event=stop,
+                        progress_callback=lambda tile, stage, status, message: progress(f"{tile} / {stage}: {message}"))
                 if state.stopped:
                     batch.update(state="paused", detail=state.stop_reason or "Stopped after current stage")
                 elif state.errors or not state.preflight_ok or any(b.get("status") not in {"complete", "upload_pending"} for b in state.year_batches):
