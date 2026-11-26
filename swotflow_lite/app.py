@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from queue import Queue, Empty
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import webbrowser
@@ -17,12 +18,16 @@ from swotflow.processing.download import normalize_utm_tiles, authenticate
 from swotflow_lite import __version__
 from swotflow_lite import project as model, planner, runner, statistics
 from swotflow_lite.tile_selection import ContinentPicker, TileMapDialog, combine_continents
+from swotflow_lite.statistics_ui import StatisticsPanel
+from swotflow_lite.statistics_details import requested_scope, nasa_search_details, export_statistics
 
 
 class LiteApp:
     """Keep GUI mutation on the main thread and one project operation at a time."""
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: tk.Tk, *, auto_statistics: bool=True) -> None:
         self.root=root; self.project=None; self.busy=False
+        self.auto_statistics=auto_statistics;self.stats_busy=False;self.stats_pending=False
+        self.stats_generation=0;self.stats_last=0.0;self.active_project=None
         self.events=Queue(); self.stop=threading.Event(); self.buttons=[]
         root.title(f"SWOTFlow Lite v{__version__}"); root.geometry("1120x820")
         self.title=tk.StringVar(value="Create or open a separate Lite project")
@@ -31,6 +36,9 @@ class LiteApp:
         self.tabs={}
         for name in ("Project", "Process", "Cloud", "Statistics"):
             outer=ttk.Frame(self.notebook); self.notebook.add(outer,text=name)
+            if name=="Statistics":
+                frame=ttk.Frame(outer,padding=12);frame.pack(fill="both",expand=True)
+                self.tabs[name]=frame;continue
             canvas=tk.Canvas(outer,highlightthickness=0); bar=ttk.Scrollbar(outer,orient="vertical",command=canvas.yview)
             canvas.configure(yscrollcommand=bar.set); bar.pack(side="right",fill="y"); canvas.pack(fill="both",expand=True)
             frame=ttk.Frame(canvas,padding=14); window=canvas.create_window((0,0),window=frame,anchor="nw")
@@ -44,6 +52,8 @@ class LiteApp:
         ttk.Label(root,textvariable=self.status,wraplength=1080).pack(fill="x",padx=12,pady=5)
         self.log=tk.Text(root,height=9,wrap="word",state="disabled"); self.log.pack(fill="both",padx=12,pady=(0,8))
         root.protocol("WM_DELETE_WINDOW",self.close); root.after(150,self.drain)
+        self.notebook.bind("<<NotebookTabChanged>>",self.statistics_selected)
+        if auto_statistics:root.after(30000,self.poll_statistics)
 
     def entry(self, tab: str, row: int, key: str, label: str, value: str="") -> None:
         """Add an editable setting with a shared variable."""
@@ -154,20 +164,9 @@ class LiteApp:
                   wraplength=950).grid(row=8,column=0,columnspan=2,sticky="w",pady=12)
 
     def _statistics_tab(self) -> None:
-        """Show full plan coverage and reusable engine accounting."""
-        f=self.tabs["Statistics"]; bar=ttk.Frame(f);bar.grid(row=0,column=0,columnspan=2,sticky="w",pady=6)
-        self.button(bar,"Refresh Statistics",lambda:self.launch("Statistics",lambda p:None,save=False))
-        self.metrics=ttk.Treeview(f,columns=("metric","value"),show="headings",height=12)
-        self.metrics.heading("metric",text="Metric");self.metrics.heading("value",text="Value")
-        self.metrics.column("metric",width=500); self.metrics.column("value",width=400)
-        self.metrics.grid(row=1,column=0,columnspan=2,sticky="ew")
-        self.coverage=ttk.Treeview(f,columns=("tile","period","expected","verified","state"),show="headings",height=12)
-        for key,label in (("tile","Tile"),("period","Acquisition dates"),("expected","NASA inputs"),("verified","Verified in EE"),("state","Batch state")):
-            self.coverage.heading(key,text=label);self.coverage.column(key,width=165)
-        self.coverage.grid(row=2,column=0,columnspan=2,sticky="ew",pady=12)
-        ttk.Label(f,text="Counts cover every batch in the current requested scope, not just the latest year. Local-ready and bucket-uploaded are not EE complete. "
-                  "EE counts reflect the last verified observation; Sync EE refreshes it. Full source-to-pixel correctness is a separate audit.",
-                  wraplength=950).grid(row=3,column=0,columnspan=2,sticky="w")
+        """Restore detailed full-app accounting without adding pipeline mutations."""
+        self.statistics_panel=StatisticsPanel(self.tabs["Statistics"],self.refresh_statistics,self.export_statistics,self.load_nasa_search)
+        self.statistics_panel.pack(fill="both",expand=True)
 
     def new(self) -> None:
         """Create new data outside either app checkout."""
@@ -197,6 +196,8 @@ class LiteApp:
         self.intermediate.set(l["cleanup_intermediates"]);self.mosaic_cleanup.set(l["cleanup_mosaics"])
         self.cloud_cleanup.set(cloud.get("delete_after_verification",True))
         self.title.set(f"SWOTFlow Lite v{__version__} — {project.root}")
+        self.stats_generation+=1;self.statistics_panel.clear()
+        if self.auto_statistics:self.refresh_statistics()
 
     def save(self) -> bool:
         """Save editable controls; none affect an already running worker."""
@@ -211,7 +212,11 @@ class LiteApp:
             c["lite"].update(mode=self.mode.get(),batch_mosaics=int(v["batch_mosaics"]),cleanup_intermediates=self.intermediate.get(),cleanup_mosaics=self.mosaic_cleanup.get())
             for k in ("batch_source_gib","max_prepared_gib","min_free_gib"):c["lite"][k]=float(v[k])
             c["cleanup"].update(mosaics_enabled=self.mosaic_cleanup.get(),mosaic_policy="confirmed_ingestion")
-            self.project.config=c;save_project(self.project);self.status.set("Settings saved. Resume keeps recorded scientific work.");return True
+            changed=requested_scope(c)!=requested_scope(self.project.config) or c.get("destination_parent")!=self.project.config.get("destination_parent")
+            self.project.config=c;save_project(self.project)
+            if changed:
+                self.stats_generation+=1;self.statistics_panel.clear("Scope changed. Refresh Statistics and Catalogue / plan for the new selection.")
+            self.status.set("Settings saved. Resume keeps recorded scientific work.");return True
         except (ValueError,OSError) as exc:messagebox.showerror("Settings",str(exc));return False
 
     def choose_gdal(self) -> None:
@@ -262,8 +267,53 @@ class LiteApp:
                 runner.sync_and_cleanup(p,self.emit)
         self.launch("Upload prepared local mosaics",task)
 
-    def show_stats(self, p: object) -> None:
-        result=statistics.snapshot(p);model.write_json(p.root/"00_logs/lite_statistics.json",result);self.events.put(("stats",result))
+    def stats_context(self) -> tuple:
+        """Reject delayed results after changing project or scientific scope."""
+        return (str(self.project.root) if self.project else "",self.stats_generation)
+
+    def show_stats(self, p: object, context: tuple | None=None) -> None:
+        """Read the full history; persist a compact summary instead of rewriting all tables."""
+        result=statistics.snapshot(p)
+        model.write_json(p.root/"00_logs/lite_statistics.json",{k:v for k,v in result.items() if k not in {"tables","definitions"}})
+        self.events.put(("stats",(context,result)))
+
+    def refresh_statistics(self) -> None:
+        """Refresh off the UI thread without stopping, starting or locking a pipeline."""
+        if not self.project:return
+        if self.stats_busy:self.stats_pending=True;return
+        self.stats_busy=True;self.stats_pending=False
+        context=self.stats_context();project=deepcopy(self.active_project or self.project)
+        self.statistics_panel.summary.set("Refreshing local Statistics… processing continues independently.")
+        def work() -> None:
+            try:self.show_stats(project,context)
+            except Exception as exc:self.events.put(("stats_error",(context,str(exc))))
+        threading.Thread(target=work,daemon=True,name="lite-statistics").start()
+
+    def statistics_selected(self,event: object=None) -> None:
+        if self.auto_statistics and self.notebook.tab(self.notebook.select(),"text")=="Statistics":self.refresh_statistics()
+
+    def poll_statistics(self) -> None:
+        if self.busy and not self.stats_busy and time.monotonic()-self.stats_last>=60 and self.notebook.tab(self.notebook.select(),"text")=="Statistics":
+            self.refresh_statistics()
+        self.root.after(30000,self.poll_statistics)
+
+    def load_nasa_search(self,scan_id: str) -> None:
+        if not self.project or self.stats_busy:return
+        self.stats_busy=True;context=self.stats_context();project=deepcopy(self.project)
+        def work() -> None:
+            try:self.events.put(("nasa_result",(context,nasa_search_details(project,scan_id))))
+            except Exception as exc:self.events.put(("stats_error",(context,str(exc))))
+        threading.Thread(target=work,daemon=True,name="lite-nasa-history").start()
+
+    def export_statistics(self) -> None:
+        if not self.statistics_panel.result:
+            messagebox.showinfo("Statistics","Refresh Statistics first.",parent=self.root);return
+        folder=filedialog.askdirectory(title="Export all Statistics tables")
+        if folder:
+            try:
+                path=export_statistics(self.statistics_panel.result,Path(folder))
+                self.status.set("Complete Statistics exported to "+str(path))
+            except OSError as exc:messagebox.showerror("Statistics export",str(exc),parent=self.root)
 
     def launch(self, label: str, task: object, *, save: bool=True, needs_project: bool=True) -> None:
         """Run an operation on frozen settings and report progress to the GUI."""
@@ -271,13 +321,12 @@ class LiteApp:
         if needs_project and not self.project:
             messagebox.showinfo("Project required","Create or open a Lite project first.");return
         if save and not self.save():return
-        project=deepcopy(self.project);self.busy=True;self.stop.clear()
+        project=deepcopy(self.project);self.active_project=project;self.busy=True;self.stop.clear()
         for button in self.buttons:button.configure(state="disabled")
         self.status.set(label+" running…")
         def background() -> None:
             try:
                 task(project)
-                if project:self.show_stats(project)
                 self.events.put(("done",label+" finished. Review pending/attention counts."))
             except Exception as exc:
                 self.events.put(("error",str(exc)))
@@ -291,17 +340,21 @@ class LiteApp:
         try:
             for _ in range(150):
                 kind,value=self.events.get_nowait()
-                if kind=="stats":
-                    self.metrics.delete(*self.metrics.get_children());self.coverage.delete(*self.coverage.get_children())
-                    for key,val in value["metrics"].items():self.metrics.insert("","end",values=(key,val))
-                    for row in value["batches"]:self.coverage.insert("","end",values=(row["tile"],row["start"]+" / "+row["end"],row["expected"],row["verified"],row["state"]))
+                if kind in {"stats","stats_error","nasa_result"}:
+                    context,payload=value;self.stats_busy=False;self.stats_last=time.monotonic()
+                    if context==self.stats_context():
+                        if kind=="stats":self.statistics_panel.render(payload)
+                        elif kind=="nasa_result":self.statistics_panel.show_search(payload)
+                        else:self.statistics_panel.clear("Statistics unavailable: "+payload+". Processing was not stopped; refresh to retry.")
+                    if self.stats_pending:self.refresh_statistics()
                 elif kind=="plan":self.vars["manual_plan"].set(value)
                 else:
                     self.log.configure(state="normal");self.log.insert("end",value+"\n");self.log.see("end");self.log.configure(state="disabled")
                     if kind in {"done","error"}:
-                        self.busy=False;self.status.set(value)
+                        self.busy=False;self.active_project=None;self.status.set(value)
                         for button in self.buttons:button.configure(state="normal")
                         if kind=="error":messagebox.showerror("Operation needs attention",value)
+                        if self.auto_statistics:self.refresh_statistics()
         except Empty:pass
         self.root.after(150,self.drain)
 

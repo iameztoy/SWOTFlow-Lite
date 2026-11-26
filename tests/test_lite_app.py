@@ -18,7 +18,7 @@ class LiteAppTests(unittest.TestCase):
         with mock.patch.object(model, 'defaults_path', return_value=self.folder/'absent.json'):
             self.project = model.create(self.folder/'data', 'Test Lite')
         self.root = tk.Tk(); self.root.withdraw()
-        self.app = LiteApp(self.root)
+        self.app = LiteApp(self.root,auto_statistics=False)
         self.app.apply(self.project)
         self.addCleanup(self.dispose)
 

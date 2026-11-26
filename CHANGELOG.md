@@ -1,5 +1,15 @@
 # Release history
 
+## v0.3.0 — 26 November 2026
+
+- Restore full Statistics categories in Lite: tile/year completion, dates, processing versions, exact file histories, source lineage, mosaics, uploads, NASA searches, run/update history, storage and cleanup. Retain all table rows instead of the older preview caps.
+- Add a full-period status map, completion/upload plots, search, pagination, horizontal/vertical scrolling, selected-row metadata, and full CSV/JSON export.
+- Require every requested year and matching current EE evidence before marking a tile finished. Separate empty catalogue windows, pending work, stale verification and conflicting/unknown lineage. A new inventory can invalidate an old VERIFIED upload row without erasing cumulative processing history.
+- Display saved NASA filename/version choices, download events and comparisons with loaded EE source lineage. Existing processing-version priority remains unchanged.
+- Refresh Statistics in a separate thread, preserve workflow execution on display errors, and reject delayed results after a project/scope change. No new network requests or per-file processing checks are introduced.
+- Preserve scientific processing, upload/cleanup behavior, Resume checkpoints and project schemas. The release adds information views; it does not migrate GeeUp projects or modify cloud assets.
+- Validation: 842 tests passed with five existing optional/environment skips (847 total); all 17 focused Statistics checks passed after the final layout adjustment. Metadata-only replays of both retained pilot routes and desktop table/map checks passed. No live uploads or asset changes were performed.
+
 ## v0.2.0 — 26 November 2026
 
 - Add an offline Project tile map with clickable UTM grids, zoom/pan, fit selection, country boundaries/names and tile labels.

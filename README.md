@@ -1,4 +1,4 @@
-# SWOTFlow Lite v0.2.0
+# SWOTFlow Lite v0.3.0
 
 A separate, four-tab desktop application for native 100 m SWOT processing and ordinary Earth Engine ingestion through Google Cloud Storage. GeeUp remains a separate application.
 
@@ -44,7 +44,9 @@ The offline map uses the existing bundled UTM grid and continent presets, plus p
 
 The simplified UI supports native 100 m **exact UTM tiles** and deterministic lowest-quality-code mosaicking. It does not expose browser automation, reprojection or cross-zone EE consolidation. Compatibility modules remain internally to preserve tested science/history contracts; Lite never starts ChromeDriver.
 
-Statistics separates local preparation, manual upload waiting, bucket staging, EE ingestion, verification and cleanup. It covers the full current tile/date plan and withholds complete coverage for duplicate acquisition ownership. An empty catalogue is reported as no available acquisitions. EE counts describe the last verification; use Sync EE for a fresh remote check.
+Statistics restores the full engine's detailed information: **finished/pending tiles and years, status map and plots, download/extraction filenames, source-to-mosaic lineage, processing versions, mosaics, upload outcomes, NASA search/version history, update/run history, disk usage and cleanup**. The two menus choose a category and table. Search, both scrollbars, full-row details and CSV/JSON exports keep every row available, including histories larger than the old preview limits.
+
+A tile is finished only when its **entire requested date range** has catalogue coverage and all preferred inputs have matching EE evidence in a current, conflict-free inventory. An empty catalogue window is distinguished from pending work. Cumulative processing history remains visible after local cleanup. Refresh Statistics reads local records in a background thread; it does not download, upload or delete files. **Cloud → Sync EE / clean verified copies** performs the existing remote verification/cleanup workflow. See [Statistics instructions](docs/lite-setup.md#statistics-and-recovery) for evidence freshness and NASA comparisons.
 
 Only one controller may operate on a project at a time. Back up project databases and logs. New dates/tiles use a refreshed catalogue plan; completed scientific receipts are reused. Changes to scientific choices or the destination require a separate project. Newly published processing revisions may need explicit replacement review; existing assets are never silently overwritten.
 

@@ -1,5 +1,15 @@
 # SWOTFlow Lite validation
 
+## v0.3.0 — full Statistics
+
+The Windows/Python 3.11 application suite ran **847 tests: 842 passed, five existing optional/environment skips**. All 17 new Statistics regressions also passed after the final column-order adjustment. Dependencies and Python 3.11/3.12 support are unchanged; this release did not repeat the earlier clean Python 3.12 installation test.
+
+New tests cover full requested tile/year completion, explicitly empty searches, missing/duplicate windows, expanded scope, pending uploads, stale/conflicting EE lineage, disappearance of previously verified assets from a newer inventory, preservation of cleaned-file histories, both Cloud routes, NASA version priority/events, archived run/cleanup history, exports above 1,000 rows, table pagination/filtering, map rendering, and isolation of Statistics errors/delayed results from the active workflow.
+
+The actual Statistics collector was exercised on separate metadata-only copies of both retained v0.1.0 pilot projects. It exposed exact filenames, source lineage, NASA searches, stages and cleanup results without changing the original metadata. Refresh took approximately 0.1 seconds per small copied project. This is not a large-project performance estimate. The replay uses historical verification: the pilot's test assets had already been removed, so it does not establish current remote asset presence. No NASA downloads, Cloud transfers or EE mutations were performed for this Statistics release.
+
+Desktop review checked the tile table, full-period map/plots, category navigation and loading a retained NASA search. Scientific processing and the existing guarded cleanup/Resume workflows were not changed. Statistics now calls the existing engine's accounting with its row limits disabled; Lite's coverage calculation requires full-scope evidence, and display refresh runs separately from workflow execution.
+
 ## v0.1.1 — Python 3.12.10 compatibility
 
 Validated on Windows using a clean **64-bit CPython 3.12.10** installation and the actual PowerShell installer. All pinned dependencies installed; `pip check` and application imports passed. The full suite ran **818 tests: 813 passed, five skipped** (the same optional browser, symlink and in-process GDAL checks described below). GDAL subprocess tests used the existing separate Python 3.11 GDAL/NetCDF environment. Installer preservation tests also passed under the existing Python 3.11 app environment.

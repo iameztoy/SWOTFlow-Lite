@@ -1920,7 +1920,7 @@ def plan_cleanup_candidates(
     return result
 
 
-def _collect_project_insights(config: Mapping[str, Any], *, include_cleanup: bool = True) -> ProjectInsights:
+def _collect_project_insights(config: Mapping[str, Any], *, include_cleanup: bool = True, include_all_rows: bool = False) -> ProjectInsights:
     """Compute project-level metrics from manifests, reports, and local folders."""
     raw_folder = processing_path(config, "raw_downloads")
     extracted_folder = processing_path(config, "extracted_geotiffs")
@@ -2439,20 +2439,20 @@ def _collect_project_insights(config: Mapping[str, Any], *, include_cleanup: boo
             (stage, status, count)
             for (stage, status), count in sorted(stage_counts.items())
         ],
-        tile_counts=tile_counter.most_common(50),
+        tile_counts=tile_counter.most_common(None if include_all_rows else 50),
         date_counts=sorted(date_counter.items()),
         processing_level_counts=level_rows,
         processing_level_tile_counts=tile_level_rows,
-        mosaic_output_grid_counts=mosaic_output_grid_counter.most_common(50),
-        mosaic_source_tile_counts=mosaic_source_tile_counter.most_common(50),
+        mosaic_output_grid_counts=mosaic_output_grid_counter.most_common(None if include_all_rows else 50),
+        mosaic_source_tile_counts=mosaic_source_tile_counter.most_common(None if include_all_rows else 50),
         upload_status_counts=upload_status_counter.most_common(),
-        uploaded_tile_counts=uploaded_tile_counter.most_common(100),
+        uploaded_tile_counts=uploaded_tile_counter.most_common(None if include_all_rows else 100),
         uploaded_date_counts=sorted(uploaded_date_counter.items()),
-        uploaded_processing_level_counts=uploaded_level_counter.most_common(50),
-        uploaded_grid_counts=uploaded_grid_counter.most_common(50),
+        uploaded_processing_level_counts=uploaded_level_counter.most_common(None if include_all_rows else 50),
+        uploaded_grid_counts=uploaded_grid_counter.most_common(None if include_all_rows else 50),
         upload_error_counts=[
             (status, message, count)
-            for (status, message), count in upload_error_counter.most_common(100)
+            for (status, message), count in upload_error_counter.most_common(None if include_all_rows else 100)
         ],
         upload_qa_tile_rows=upload_qa_rows,
         update_coverage_tile_rows=update_coverage_rows,
@@ -2470,11 +2470,11 @@ def _collect_project_insights(config: Mapping[str, Any], *, include_cleanup: boo
     )
 
 
-def collect_project_insights(config: Mapping[str, Any], *, include_cleanup: bool = True) -> ProjectInsights:
+def collect_project_insights(config: Mapping[str, Any], *, include_cleanup: bool = True, include_all_rows: bool = False) -> ProjectInsights:
     """Compute insights; metadata-only refreshes can omit costly cleanup proofs."""
     cached_swot_filename_fields.cache_clear()
     try:
-        return _collect_project_insights(config, include_cleanup=include_cleanup)
+        return _collect_project_insights(config, include_cleanup=include_cleanup, include_all_rows=include_all_rows)
     finally:
         cached_swot_filename_fields.cache_clear()
 

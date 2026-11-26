@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>SWOTFlow Lite v0.2.0 setup</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;color:#163047}pre{white-space:pre-wrap;font:inherit}a{color:#12608a}</style><h1>SWOTFlow Lite v0.2.0</h1><p><a href="cloud-upload-setup.html">Google Cloud setup: billing, bucket and sign-in</a></p><pre># SWOTFlow Lite v0.2.0 — setup and workflow
+<!doctype html><html lang="en"><meta charset="utf-8"><title>SWOTFlow Lite v0.3.0 setup</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;color:#163047}pre{white-space:pre-wrap;font:inherit}a{color:#12608a}</style><h1>SWOTFlow Lite v0.3.0</h1><p><a href="cloud-upload-setup.html">Google Cloud setup: billing, bucket and sign-in</a></p><pre># SWOTFlow Lite v0.3.0 — setup and workflow
 
 ## First installation
 
@@ -66,7 +66,19 @@ Browser uploads cannot be constrained by the app&#x27;s staging cap. Upload mana
 
 ## Statistics and recovery
 
-Refresh Statistics for expected preferred NASA originals, last verified EE representation, pending inputs, duplicate ownership, per-batch dates/status and the shared processing/upload metrics. Manual original and app-owned bucket copies are accounted separately. Zero NASA acquisitions is shown as no available acquisitions. A complete first year never makes later years complete.
+Open **Statistics** and choose a category with the first menu and a table with the second. **Tiles and dates → Finished and pending tiles** shows each selected tile across the entire saved project period. **Entire period by tile/year** shows what remains in each year. **Status map / plots** displays the same full-period status with reference boundaries and historical upload counts.
+
+The other categories restore detailed engine accounting: exact download/extraction filenames, source-to-mosaic lineage, processing versions, mosaic membership/exclusions, uploaded assets and pending/errors, run/update history, disk/cleanup totals, and recorded local and Cloud cleanup timestamps. A saved running checkpoint is not proof that a worker is still running. Manual original and app-owned bucket copies are listed separately. Consolidation information is read-only and only appears if this installation has a replacement register; Lite does not run consolidations.
+
+**NASA history → All catalogue searches** includes completed and interrupted searches. Select a row and click **Load NASA search** for its filenames, selected/excluded versions and download events. The NASA-versus-EE version view compares that saved search with retained EE lineage using the existing version priority; it is not a new NASA query or a spatial-gap measurement. Refresh **Catalogue / plan** to obtain newer NASA observations.
+
+Tables support row filtering, vertical/horizontal scrolling, pages of 200 rows and full selected-row metadata. **Export all tables** writes JSON and CSVs for all loaded tables; **Export displayed table** exports every row in that table, not just the visible page or filtered subset. NASA candidate/event/version tables refer to the selected loaded search; all original searches remain in the project database.
+
+Statistics refreshes on opening the project/tab and periodically while a workflow is active and Statistics is visible. Refresh reads local records in a separate thread and performs no remote transfer or deletion. A read error leaves the workflow running and is displayed for retry. Large histories may take longer to read; the small retained pilot needed about 0.1 seconds per refresh, not a continent-scale performance estimate.
+
+A complete first year never makes later years complete. Every requested yearly catalogue window must be accounted for, with all preferred sources verified against matching provenance and a current, conflict-free EE inventory. Empty completed searches are marked no available acquisitions; missing searches require a new plan. A stale inventory (older than the existing 24-hour validity period) withholds a finished tile label without erasing historical counts. Extending the scope clears the old tile completion claim until Catalogue / plan is refreshed. A newer inventory that no longer contains an asset cannot count its old VERIFIED queue row as current coverage.
+
+Local raw/extracted/mosaic files may disappear after safe cleanup while cumulative processing counts and filenames remain in history. Disk presence, source counts, processing-stage records and mosaic asset counts are different units. The map does not certify pixel coverage or the absence of source nodata. **Cloud → Sync EE / clean verified copies** refreshes remote evidence and runs the existing guarded cleanup; it is distinct from the read-only Statistics refresh.
 
 Project source counts remain visible if another asset in the collection has unknown lineage. Statistics reports those unresolved collection assets separately and withholds collection completeness; **Sync EE** refreshes the inventory. This does not mean the project&#x27;s already verified uploads failed.
 

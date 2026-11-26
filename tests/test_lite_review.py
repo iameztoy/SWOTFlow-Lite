@@ -40,7 +40,9 @@ class LiteReviewTests(unittest.TestCase):
     def save_plan(self, batches):
         plan = {'schema_version':1,'science':planner.science_identity(self.config),
                 'scope':{'tiles':['UTM35L'],'start':'2023-01-01','end':'2026-12-31'},
-                'batches':batches,'scans':[]}
+                'batches':batches,'scans':[{'tile':'UTM35L','start':f'{y}-01-01','end':f'{y}-12-31',
+                    'scan_id':f'scan-{y}','preferred_files':sum(len(b['expected']) for b in batches if b['start'].startswith(str(y)))}
+                    for y in range(2023,2027)]}
         write_json(self.root/'00_logs/lite_plan.json',plan)
         return plan
 

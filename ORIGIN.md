@@ -20,3 +20,9 @@ override is SWOTFLOW_LITE_DATA_HOME; the original app's override is ignored.
 The root engineering documents retained from GeeUp describe compatibility-engine
 features, including features not exposed in Lite. Start with README.md and
 docs/lite-setup.md for this application's supported workflow.
+
+Lite v0.3.0 adds an optional unlimited-row mode to the inherited Statistics
+collector; its default behavior remains compatible. The Lite interface reads
+those tables alongside its own batch, Cloud and NASA histories. Full-period tile
+completion and display refresh are Lite-specific; source processing, upload,
+cleanup and Resume implementations remain inherited.
