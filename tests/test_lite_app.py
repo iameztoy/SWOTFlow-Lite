@@ -31,6 +31,24 @@ class LiteAppTests(unittest.TestCase):
         self.app=None; self.root=None
         gc.collect()
 
+    def test_compression_is_shared_and_does_not_change_plan_science_or_history(self):
+        from swotflow_lite.planner import science_identity
+        from swotflow.processing.encoding import COMPRESSION_LABEL_BY_VALUE
+        before=science_identity(self.project.config)
+        evidence=self.project.root/'00_logs'/'retained.json';evidence.write_text('{"unchanged":true}')
+        self.assertEqual(self.project.config['mosaic']['compression'],'zstd')
+        for codec in ('none','deflate','zstd'):
+            self.app.vars['compression'].set(COMPRESSION_LABEL_BY_VALUE[codec])
+            self.assertEqual(self.app.compression_combo.get(),COMPRESSION_LABEL_BY_VALUE[codec])
+            self.assertTrue(self.app.save())
+            restored=model.open_project(self.project.root)
+            self.assertEqual(restored.config['mosaic']['compression'],codec)
+            self.assertEqual(science_identity(restored.config),before)
+            self.assertEqual(evidence.read_text(),'{"unchanged":true}')
+        del self.project.config['mosaic']['compression']
+        self.app.apply(self.project)
+        self.assertEqual(self.app.vars['compression'].get(),COMPRESSION_LABEL_BY_VALUE['none'])
+
     def test_saved_worker_and_route_choices_preserve_paths_and_metadata(self):
         original = deepcopy(self.project.config)
         self.app.mode.set('automatic')
@@ -100,6 +118,7 @@ class LiteAppTests(unittest.TestCase):
     def test_zone_view_shares_route_settings_and_saves_window_without_cloud_changes(self):
         from swotflow_lite.grouping import HEMISPHERE, WINDOWS
         original=deepcopy(self.project.config)
+        self.assertEqual(str(self.app.zone_panel.compression_combo.cget("textvariable")), str(self.app.vars["compression"]))
         self.app.zone_panel.activate()
         self.app.vars['zone_window'].set(next(k for k,v in WINDOWS.items() if v=='half_month'))
         self.app.mode.set('prepare')

@@ -286,6 +286,9 @@ class GuiLayoutTests(unittest.TestCase):
         path_patch = mock.patch("swotflow.ui.main.CONFIG_PATH", root / "config.yaml")
         path_patch.start()
         self.addCleanup(path_patch.stop)
+        defaults_patch = mock.patch("swotflow.project.upload_defaults.defaults_path", return_value=root / "upload_defaults.json")
+        defaults_patch.start()
+        self.addCleanup(defaults_patch.stop)
 
     def sample_config(self, root: Path) -> dict:
         return {

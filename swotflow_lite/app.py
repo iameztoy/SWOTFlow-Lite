@@ -15,6 +15,7 @@ import webbrowser
 from swotflow.paths import APP_ROOT
 from swotflow.project.model import save_project
 from swotflow.processing.download import normalize_utm_tiles, authenticate
+from swotflow.processing.encoding import COMPRESSION_LABELS, COMPRESSION_LABEL_BY_VALUE
 from swotflow_lite import __version__
 from swotflow_lite import project as model, planner, runner, statistics
 from swotflow_lite.tile_selection import ContinentPicker, TileMapDialog, combine_continents
@@ -133,18 +134,23 @@ class LiteApp:
             (6,"download_threads","Parallel downloads","10"),(7,"download_batch","NASA network batch size","50"),
             (8,"extract_workers","Extraction workers","4"),(9,"mosaic_workers","Mosaic workers","4")):
             self.entry("Process",row,key,label,value)
+        self.vars['compression']=tk.StringVar(value=COMPRESSION_LABEL_BY_VALUE['zstd'])
+        ttk.Label(f,text="Mosaic compression").grid(row=10,column=0,sticky="w",pady=5)
+        self.compression_combo=ttk.Combobox(f,textvariable=self.vars['compression'],values=list(COMPRESSION_LABELS),state="readonly",width=42)
+        self.compression_combo.grid(row=10,column=1,sticky="ew",pady=5)
         self.intermediate=tk.BooleanVar(value=True); self.mosaic_cleanup=tk.BooleanVar(value=True)
-        ttk.Checkbutton(f,text="Clean downloaded/extracted files after verified downstream processing",variable=self.intermediate).grid(row=10,column=0,columnspan=2,sticky="w",pady=5)
-        ttk.Checkbutton(f,text="Clean local mosaics only after confirmed EE ingestion + matching provenance",variable=self.mosaic_cleanup).grid(row=11,column=0,columnspan=2,sticky="w",pady=5)
-        actions=ttk.Frame(f); actions.grid(row=12,column=0,columnspan=2,sticky="w",pady=10)
+        ttk.Checkbutton(f,text="Clean downloaded/extracted files after verified downstream processing",variable=self.intermediate).grid(row=11,column=0,columnspan=2,sticky="w",pady=5)
+        ttk.Checkbutton(f,text="Clean local mosaics only after confirmed EE ingestion + matching provenance",variable=self.mosaic_cleanup).grid(row=12,column=0,columnspan=2,sticky="w",pady=5)
+        actions=ttk.Frame(f); actions.grid(row=13,column=0,columnspan=2,sticky="w",pady=10)
         self.button(actions,"Authenticate NASA",lambda:self.launch("NASA sign-in",lambda p:authenticate(strategy="interactive",persist=False),save=False,needs_project=False))
         self.button(actions,"Catalogue / plan",lambda:self.launch("NASA catalogue planning",lambda p:planner.build_plan(p,self.emit)))
         self.button(actions,"Start / Resume",lambda:self.launch("Processing",lambda p:runner.run(p,self.stop,self.emit)))
         ttk.Button(actions,text="Stop after current stage",command=self.stop.set).pack(side="left")
         ttk.Label(f,text="NASA sign-in uses the launch console and stays in memory. Batches never split an acquisition day. "
                   "Source limits and disk reserve are checked before new processing; raster expansion estimates are not a hard disk quota. "
-                  "Manual mode pauses as prepared files accumulate. EE tasks already submitted continue if the app closes.",
-                  wraplength=950).grid(row=13,column=0,columnspan=2,sticky="w",pady=10)
+                  "Manual mode pauses as prepared files accumulate. Compression is lossless and shared with Process Zones; "
+                  "existing verified files are reused on Resume. EE tasks already submitted continue if the app closes.",
+                  wraplength=950).grid(row=14,column=0,columnspan=2,sticky="w",pady=10)
 
     def _cloud_tab(self) -> None:
         """Offer automatic transfer and explicit registration of manual uploads."""
@@ -197,6 +203,7 @@ class LiteApp:
             "transfers":cloud.get("concurrent_uploads",2),"ingestions":c["upload"].get("max_active_ingestions",2),"staging_gib":cloud.get("staging_limit_gib",3),"prefix":cloud.get("prefix","swotflow-lite"),
             "download_threads":c["download"]["threads"],"download_batch":c["download"]["batch_size"],"extract_workers":c["extract"]["workers"],"mosaic_workers":c["mosaic"]["workers"]}
         values.update({k:l[k] for k in ("batch_mosaics","batch_source_gib","max_prepared_gib","min_free_gib")})
+        values['compression']=COMPRESSION_LABEL_BY_VALUE[c['mosaic'].get('compression','none')]
         values['grouping']=next(label for label,mode in LABELS.items() if mode==c['mosaic'].get('grouping_mode',EXACT))
         values['zone_window']=next(label for label,window in WINDOWS.items() if window==l.get('zone_batch_window','adaptive'))
         for k,v in values.items():self.vars[k].set(str(v))
@@ -217,6 +224,7 @@ class LiteApp:
             if grouping!=c['mosaic'].get('grouping_mode',EXACT) and (self.project.root/'00_logs/lite_plan.json').exists():
                 raise ValueError('Choose mosaic grouping before the first Catalogue / plan. Use a separate project and collection to change an existing planned workflow; its history remains unchanged.')
             c['mosaic']['grouping_mode']=grouping
+            c['mosaic']['compression']=COMPRESSION_LABELS[v['compression']]
             c["download"].update(utm_tiles=normalize_utm_tiles(v["tiles"]),start_date=v["start"],end_date=v["end"],threads=int(v["download_threads"]),batch_size=int(v["download_batch"]))
             c["extract"]["workers"]=int(v["extract_workers"]);c["mosaic"]["workers"]=int(v["mosaic_workers"])
             c["gdal"]["python"]=v["gdal"];c["destination_parent"]=v["destination"]

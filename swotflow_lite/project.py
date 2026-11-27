@@ -62,6 +62,7 @@ def create(root: Path, name: str) -> SWOTFlowProject:
     base.setdefault("execution", {}).update(dry_run=False, require_confirmation=False)
     project = create_project(root, name, base)
     project.config["lite"] = deepcopy(LITE_DEFAULTS)
+    project.config["mosaic"]["compression"] = "zstd"
     project.config["upload"].update(base["upload"])
     project.config.setdefault("cloud_upload", {}).setdefault("concurrent_uploads", 2)
     project.config["automation"].update(include_upload=False, process_by_year=True)
@@ -90,6 +91,8 @@ def validate(config: dict, *, cloud: bool = False) -> None:
     for key in ("batch_source_gib", "max_prepared_gib", "min_free_gib"):
         if not math.isfinite(float(settings[key])) or float(settings[key]) <= 0:
             raise ValueError(key + " must be a positive, finite GiB value.")
+    from swotflow.processing.encoding import normalize_compression
+    normalize_compression(config["mosaic"].get("compression"))
     from swotflow_lite.grouping import WINDOWS
     if settings.get("zone_batch_window", "adaptive") not in WINDOWS.values():
         raise ValueError("Select a supported zone processing window.")

@@ -34,3 +34,5 @@ it does not alter their scientific pixel algorithm. The inherited upload filter 
 uses known original source tiles instead of guessing them from a grouped output's
 N/S suffix. Grouped Cloud manifests also identify the grouping mode and source
 tiles. The original GeeUp repository/installation is unchanged.
+
+Lite v0.4.2 ports the shared lossless mosaic encoding, encoding provenance and oversized-staging diagnostics from the GeeUp v0.9.2 candidate. The full application UI is not included.

@@ -1,5 +1,14 @@
 # Release history
 
+## 0.4.2 - 27 November 2026
+
+- Add selectable lossless ZSTD/DEFLATE encoding for newly created mosaics, shared by manual and automated processing. Preserve source values, paired quality, masks, grids and metadata; no sparse/lossy options.
+- Use ZSTD for new Lite projects; preserve existing settings and share one codec between Process and Process Zones. Clarify that complete source accounting does not imply continuous spatial coverage.
+- Record encoding in local provenance while keeping scientific Resume identity stable. Reuse existing verified mosaics/assets and cleaned-input evidence when only the codec changes.
+- Explain oversized staging files with filename, size and selected cap; preserve files and active transfers without automatically raising the cap.
+- Add exact-value GDAL, GUI persistence, ordinary/yearly Resume and cleanup regressions. Keep all investigation material outside GitHub.
+
+
 ## v0.4.1 — 27 November 2026
 
 - Extend the existing zone/hemisphere workflow with a focused Process Zones tab, selected-band queue preview and optional half-month/calendar-month batch windows. Keep adaptive sizing and tile-by-tile processing as existing defaults.

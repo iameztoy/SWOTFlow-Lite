@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>SWOTFlow Lite v0.4.1 setup</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;color:#163047}pre{white-space:pre-wrap;font:inherit}a{color:#12608a}</style><h1>SWOTFlow Lite v0.4.1</h1><p><a href="cloud-upload-setup.html">Google Cloud setup: billing, bucket and sign-in</a></p><pre># SWOTFlow Lite v0.4.1 — setup and workflow
+<!doctype html><html lang="en"><meta charset="utf-8"><title>SWOTFlow Lite v0.4.2 setup</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;color:#163047}pre{white-space:pre-wrap;font:inherit}a{color:#12608a}</style><h1>SWOTFlow Lite v0.4.2</h1><p><a href="cloud-upload-setup.html">Google Cloud setup</a> · <a href="mosaic-compression.md">Mosaic compression</a></p><pre># SWOTFlow Lite v0.4.2 — setup and workflow
 
 ## First installation
 
@@ -125,4 +125,8 @@ Local source/metadata verification is not a guarantee of pixel-level scientific 
 ## Costs
 
 Use Billing → Reports, filter to the project and Cloud Storage, group by SKU. Costs typically arrive within a day but can take longer. Disabling soft delete affects future deletions; previously deleted copies keep their prior expiry. The app tracks bytes/states, not a guaranteed final invoice. Inspect the pilot bill before terabyte-scale work.
+
+## Lossless mosaic compression
+
+In **Process** or **Process Zones**, choose **Mosaic compression**. Both views share one setting. New projects use ZSTD; existing projects keep their saved setting (older projects without it remain uncompressed). DEFLATE is also available. All three options preserve values, quality codes, masks and native grids. The choice applies to newly created mosaics in both prepare-only and fully automatic workflows. Resume reuses already verified mosaics; it does not recompress or reupload them. See [compression details](mosaic-compression.md).
 </pre></html>

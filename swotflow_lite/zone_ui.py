@@ -6,6 +6,7 @@ from tkinter import ttk, messagebox
 from swotflow.processing.download import normalize_utm_tiles
 from swotflow_lite.grouping import HEMISPHERE, LABELS, WINDOWS, scope_groups
 from swotflow_lite import planner, runner
+from swotflow.processing.encoding import COMPRESSION_LABELS
 
 
 class ZonePanel:
@@ -44,6 +45,9 @@ class ZonePanel:
             "both selected hemispheres of a zone stay together. NASA history still records each original tile, filename, version and checksum. "
             "Statistics → Tiles and dates shows zone coverage and the saved batch queue. Cloud settings and all cleanup options are shared with Process. "
             "Prepared-only mosaics remain local until imported and verified in EE.",wraplength=950).grid(row=8,column=0,columnspan=2,sticky='w',pady=8)
+        ttk.Label(frame,text="Mosaic compression (shared with Process)").grid(row=9,column=0,sticky='w',pady=6)
+        self.compression_combo=ttk.Combobox(frame,textvariable=app.vars['compression'],values=list(COMPRESSION_LABELS),state='readonly',width=42)
+        self.compression_combo.grid(row=9,column=1,sticky='ew',pady=6)
         for key in ('tiles','grouping','start','end'):
             app.vars[key].trace_add('write',lambda *args:self.refresh())
         self.refresh()

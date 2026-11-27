@@ -27,6 +27,9 @@ GROUPS = {
 }
 
 DEFAULT_NOTES = {
+    "zones":"Complete means all preferred NASA inputs in the selected scope are represented in verified EE assets, not continuous valid pixels. No available acquisitions differs from missing or failed processing.",
+    "tiles":"Completion requires every preferred available input across the full selected period. A successful empty catalogue search is not a download failure or proof of continuous spatial coverage.",
+    "years":"Each year records expected preferred NASA inputs, verified inputs and pending processing. No available acquisitions means a successful catalogue search returned none; spatial NoData is a separate question.",
     "download_manifest":"Cumulative exact download filenames and recorded status. Files removed after processing remain in history.",
     "extract_manifest":"Cumulative extraction records. A removed intermediate does not erase completed processing history.",
     "mosaic_manifest":"Cumulative mosaic records, including source membership, versions and acquisition intervals. Local presence is separate from historical completion.",
@@ -161,6 +164,8 @@ class StatisticsPanel(ttk.Frame):
             self.tree.column(column,width=360 if any(w in column for w in ("file","path","message","detail","metric")) else 145,
                              minwidth=70,stretch=False)
         note=self.result.get("definitions",{}).get(key,DEFAULT_NOTES.get(key,"Saved project records. Stage records, source granules and mosaic assets use different units; they must not be added together."))
+        if key in ("zones", "tiles", "years") and key in self.result.get("definitions", {}):
+            note += " " + DEFAULT_NOTES[key]
         if key.startswith("consolidation_") and not self.rows:note+=" No saved consolidation rows in this Lite installation."
         if key.startswith("nasa_") and self.result.get("selected_scan") and key!="nasa_searches":
             note+=" Selected search: "+self.result["selected_scan"]

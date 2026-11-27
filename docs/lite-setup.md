@@ -1,4 +1,4 @@
-# SWOTFlow Lite v0.4.1 — setup and workflow
+# SWOTFlow Lite v0.4.2 — setup and workflow
 
 ## First installation
 
@@ -125,3 +125,7 @@ Local source/metadata verification is not a guarantee of pixel-level scientific 
 ## Costs
 
 Use Billing → Reports, filter to the project and Cloud Storage, group by SKU. Costs typically arrive within a day but can take longer. Disabling soft delete affects future deletions; previously deleted copies keep their prior expiry. The app tracks bytes/states, not a guaranteed final invoice. Inspect the pilot bill before terabyte-scale work.
+
+## Lossless mosaic compression
+
+In **Process** or **Process Zones**, choose **Mosaic compression**. Both views share one setting. New projects use ZSTD; existing projects keep their saved setting (older projects without it remain uncompressed). DEFLATE is also available. All three options preserve values, quality codes, masks and native grids. The choice applies to newly created mosaics in both prepare-only and fully automatic workflows. Resume reuses already verified mosaics; it does not recompress or reupload them. See [compression details](mosaic-compression.md).

@@ -1,6 +1,8 @@
-# SWOTFlow Lite v0.4.1
+# SWOTFlow Lite v0.4.2
 
-A separate, four-tab desktop application for native 100 m SWOT processing and ordinary Earth Engine ingestion through Google Cloud Storage. GeeUp remains a separate application.
+**v0.4.2: selectable lossless mosaic compression.** ZSTD and DEFLATE preserve decoded values and masks. Shared processing controls, unchanged source history, and Resume reuse of existing verified files. See [compression and existing projects](docs/mosaic-compression.md).
+
+A separate desktop application for native 100 m SWOT processing and ordinary Earth Engine ingestion through Google Cloud Storage. GeeUp remains a separate application.
 
 ## Two routes
 

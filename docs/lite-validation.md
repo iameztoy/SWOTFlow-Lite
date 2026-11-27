@@ -1,5 +1,14 @@
 # SWOTFlow Lite validation
 
+## v0.4.2 — selectable lossless mosaic compression
+
+The complete suite ran **886 tests: 860 passed, 26 environment/opt-in skips**. All **57 configured-GDAL raster/planning checks** passed separately, including full decoded array/mask equality for both codecs, overlap ties, singletons, separated gaps and both hemispheres. Final GUI checks passed after restoring unchanged Unicode labels. This release preserves Python 3.11/3.12 compatibility without changing dependencies; a clean 3.12 installation was not repeated.
+
+Process and Process Zones share one persisted setting, for prepare-only and automatic routes. Existing projects without a codec retain uncompressed behavior; new projects use ZSTD. Ordinary/yearly Resume and cleaned-input regression cases preserve completed work after only an encoding change. Source filename history, scientific identities, metadata, current-file checksums and guarded cleanup remain intact. No routine full-pixel comparison was added. See [compression behavior](mosaic-compression.md).
+
+
+A separate two-mosaic live pilot (north/south Zone 35) passed with 23 exact retained NASA inputs. The actual new writer produced full decoded-array/mask equality against the baseline; both codecs ingested successfully into an isolated EE test collection, with exact sampled cloud equality. Metadata, source accounting, duplicate-free Resume, staging deletion and local TIFF/world-file cleanup passed. Statistics retained 4/4 tiles and 23/23 inputs after cleanup. Production assets were unchanged. These release checks are not enabled during ordinary runs.
+
 ## v0.4.1 — bounded zone windows and a focused workflow view
 
 The UI-environment suite ran **878 tests: 853 passed, 25 environment/opt-in skips**. A separate configured-GDAL run passed all **53 raster/planning checks**, including the 21 GDAL-dependent checks skipped by the UI environment. Combined coverage is **874 unique passing checks and four remaining skips** (three inherited browser DOM tests and a Windows symlink privilege test). All 14 new zone scheduling/UI checks passed. No dependencies or Python version support changed; a new Python 3.12 installation was not repeated.
