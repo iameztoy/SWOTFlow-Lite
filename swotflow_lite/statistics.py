@@ -5,7 +5,7 @@ import json
 from swotflow.project.insights import collect_project_insights
 from swotflow_lite.runner import verified_source_evidence, batch_verified, cloud_rows
 from swotflow_lite.statistics_details import collect_details
-from swotflow_lite.grouping import batch_tiles, input_groups, EXACT
+from swotflow_lite.grouping import batch_tiles, input_groups, EXACT, HEMISPHERE, scope_groups
 
 
 def collection_lineage(project: object) -> dict:
@@ -69,12 +69,13 @@ def snapshot(project: object) -> dict:
         observed = lineage.get("observed_sources", {})
         represented = {k:v for k,v in represented.items() if observed.get(k) == v}
     rows = []
-    for batch in plan.get("batches", []):
+    for position, batch in enumerate(plan.get("batches", []), 1):
         count = sum(represented.get(k) == v for k,v in batch["expected"].items())
         state = "ee_verified" if batch_verified(batch, represented) else batch["state"]
         if state == "ee_verified" and count != len(batch["expected"]):
             state = "ee_pending"
-        rows.append({"id": batch["id"], "tile": batch["tile"], "start": batch["start"], "end": batch["end"],
+        rows.append({"order": position, "processing_window":batch.get("processing_window", "adaptive"),
+                     "mosaics":batch.get("groups",0), "source_gib":round(batch.get("source_bytes",0)/2**30,3), "id": batch["id"], "tile": batch["tile"], "start": batch["start"], "end": batch["end"],
                      "source_tiles":batch_tiles(batch), "grouping":batch.get('grouping_mode',EXACT),
                      "expected":len(batch["expected"]), "verified": count, "state": state, "detail":batch.get("detail", "")})
     expected = {k:v for b in plan.get("batches", []) for k,v in b["expected"].items()}
@@ -109,6 +110,24 @@ def snapshot(project: object) -> dict:
                "EE inventory checked at":lineage.get("checked_at", "") or "Not checked", **metrics}
     details["tables"]["metrics"] = [{"metric":k,"value":v} for k,v in metrics.items()]
     details["tables"]["batches"] = rows
+    zone_rows = []
+    if project.config['mosaic'].get('grouping_mode') == HEMISPHERE:
+        for token, members in scope_groups(project.config).items():
+            original_tiles = [t for t in details['tiles'] if t['tile'] in members]
+            selected_batches = [b for b in rows if b['tile'] == token]
+            sources = {n:p for b in plan.get('batches',[]) if b['tile']==token for n,p in b['expected'].items()}
+            states = {t['state'] for t in original_tiles}
+            finished = bool(original_tiles) and len(original_tiles)==len(members) and states <= {'complete','no_available_acquisitions'}
+            zone_rows.append({'grid':token,'source_tiles':members,
+                'state':'complete' if finished and sources else 'no_available_acquisitions' if finished else 'plan_required' if not details['scope_matches'] or 'plan_required' in states else 'incomplete',
+                'expected':len(sources),'verified':sum(represented.get(n)==p for n,p in sources.items()),
+                'batches':len(selected_batches),'locally_ready_batches':sum(b['state']=='locally_ready' for b in selected_batches),
+                'verified_batches':sum(b['state']=='ee_verified' for b in selected_batches),
+                'mosaics':sum(b['mosaics'] for b in selected_batches),
+                'start':project.config['download']['start_date'],'end':project.config['download']['end_date']})
+    details['tables']['zones'] = zone_rows
+    details['definitions']['zones'] = 'Full requested scope per zone/hemisphere. Original tiles and filenames remain separate in the source tables; local-ready is not EE-complete.'
+
     return {**details,"metrics":metrics,"batches":rows,"scope":plan.get("scope"),
             "empty_catalogue_windows":[s for s in plan.get("scans",[]) if s["preferred_files"]==0],
             "project_inputs_complete":inputs_complete, "complete":complete,

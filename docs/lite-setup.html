@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>SWOTFlow Lite v0.4.0 setup</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;color:#163047}pre{white-space:pre-wrap;font:inherit}a{color:#12608a}</style><h1>SWOTFlow Lite v0.4.0</h1><p><a href="cloud-upload-setup.html">Google Cloud setup: billing, bucket and sign-in</a></p><pre># SWOTFlow Lite v0.4.0 — setup and workflow
+<!doctype html><html lang="en"><meta charset="utf-8"><title>SWOTFlow Lite v0.4.1 setup</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;color:#163047}pre{white-space:pre-wrap;font:inherit}a{color:#12608a}</style><h1>SWOTFlow Lite v0.4.1</h1><p><a href="cloud-upload-setup.html">Google Cloud setup: billing, bucket and sign-in</a></p><pre># SWOTFlow Lite v0.4.1 — setup and workflow
 
 ## First installation
 
@@ -59,6 +59,28 @@ Grouped mosaics work with both transfer routes. Extraction completes for all mem
 Statistics retains the original tile/year/source counts and shows planned mosaic count, tile-by-tile count and the difference in asset count. One grouped asset may contribute to several tiles; it is one asset, not several uploads. Each tile must still satisfy its full requested date range before it is finished.
 
 Choose grouping before the first plan. Existing planned projects retain their mode. New dates/unrelated groups can be added with a refreshed plan, but adding a band or changed source that alters an already-started mosaic is blocked. Such a change needs a reviewed replacement in a separate project/collection; this release does not silently overwrite or rebuild earlier grouped assets. The old plan and assets are kept intact.
+
+## Process Zones: complete selected zones in bounded windows
+
+Keep **Project** as the single source of area/date selection. Combine Europe and Africa, or choose individual bands manually. Select **Original projection / group UTM latitude bands by hemisphere** before the first plan, either in Project or with **Process Zones → Use zone/hemisphere grouping**. An existing tile-by-tile project must not be switched after planning: start a separate project/collection for that change.
+
+**Process Zones** is a focused view of the same controller, not a second independent workflow. It shares the local/automatic transfer choice with Process. Worker counts, source-byte/mosaic limits, disk reserve and cleanup remain in **Process**; destinations and transfers remain in **Cloud**. Only one operation can run on a project. Editing controls never changes the active worker&#x27;s frozen settings.
+
+The queue takes the first selected numbered zone, finishes the entire requested period for one selected hemisphere, finishes its other selected hemisphere if present, then moves to the next numbered zone. It gathers all selected latitude bands in a group before producing its mosaics. Northern and southern outputs remain separate; grouping does not implicitly add omitted bands or fill genuine NASA nodata.
+
+Choose a processing window:
+
+- **Adaptive (existing size limits)** preserves the previous batching behavior and remains the default.
+- **Half-month (1–15 / 16–end)** prevents a new batch from crossing a calendar half-month boundary. The second half can contain 16 days.
+- **Calendar month** prevents a new batch from crossing a month boundary.
+
+These are maximum preparation windows, not temporal aggregation. Each UTC acquisition-start date/cycle/pass still creates its own native 100 m mosaic, with paired elevation/quality and the existing version priority. Source-byte and mosaic-count limits can produce smaller batches inside any window. A complete date is never split merely to satisfy a size target. If even one whole day exceeds the source limit or estimated disk headroom, processing pauses explicitly; no incomplete mosaic is silently accepted.
+
+For Africa and Europe, begin with half-month windows plus the existing byte/count limits, then adjust from actual disk use. A fixed month alone cannot guarantee a small disk footprint. Catalogue planning can inspect a whole group/year without downloading those rasters; only the next processing batch is downloaded. In Prepare locally, finished mosaics accumulate until imported and verified. In automatic mode, a verified batch can be cleaned before the next batch. Do not remove unuploaded mosaics to make space.
+
+After changing a window or batch limits, run **Catalogue / plan zones** to apply them to unstarted work. Existing started, interrupted and completed batch IDs, scopes and checkpoints are retained; this may leave some earlier batches larger than the newly selected window. **Start / Resume zones** alone uses the saved queue. New NASA membership inside an already-started window requires explicit replacement review; the old plan remains intact if that check fails.
+
+**Statistics → Tiles and dates → Zone / hemisphere coverage** summarizes each group over the entire requested period. **Processing batches** gives queue order, dates, window, preferred inputs and expected mosaics. Original tile/year counts, full filenames, version choices, checksums and source-to-mosaic lineage remain available. Local-ready is separate from verified EE completion. One grouped mosaic is counted once, even though it represents several original tiles.
 
 ## Fully automatic route
 

@@ -1,5 +1,14 @@
 # Release history
 
+## v0.4.1 — 27 November 2026
+
+- Extend the existing zone/hemisphere workflow with a focused Process Zones tab, selected-band queue preview and optional half-month/calendar-month batch windows. Keep adaptive sizing and tile-by-tile processing as existing defaults.
+- Complete each selected zone through its full date range, with hemispheres separate and adjacent in the queue. Byte/count limits may shorten windows; dates, cycles and passes remain distinct native 100 m mosaics.
+- Preserve started/interrupted/completed batch IDs and checkpoints when refreshing scheduling limits. Rebatch only unstarted windows; refuse changed historical membership without replacing the saved plan.
+- Add full-period zone/hemisphere Statistics and ordered batch details while retaining original tile/year/source accounting and shared Cloud/cleanup behavior.
+- Clarify retained-mosaic storage pauses with retained size, configured cap and available disk space. Unuploaded mosaics remain protected.
+- No new dependencies, Cloud services or routine pixel checks. Validation results are recorded in docs/lite-validation.md.
+
 ## v0.4.0 — 26 November 2026
 
 - Add optional native UTM zone/hemisphere grouping in Project; tile-by-tile stays the default. Reuse the full engine's UTMxxN/UTMxxS naming, 100 m grids, separate UTC dates/cycles/passes and paired lowest-quality selection.

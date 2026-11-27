@@ -1,4 +1,5 @@
 """Full-period coverage, durable history and the Lite Statistics interface."""
+import gc
 from copy import deepcopy
 import csv
 import json
@@ -169,7 +170,10 @@ class StatisticsUITests(unittest.TestCase):
     def dispose(self):
         self.root.update_idletasks()
         for timer in self.root.tk.call('after','info'):self.root.after_cancel(timer)
+        self.root.update_idletasks()
         self.root.destroy()
+        self.root=None
+        gc.collect()
 
     def test_pagination_filter_and_details_include_every_filename(self):
         panel=StatisticsPanel(self.root,lambda:None,lambda:None,lambda x:None)

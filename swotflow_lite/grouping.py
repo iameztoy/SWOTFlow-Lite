@@ -8,6 +8,11 @@ from swotflow.processing.mosaic import utm_zone_hemisphere_token, MosaicConfig, 
 
 EXACT = "utm_zone"
 HEMISPHERE = "utm_zone_hemisphere"
+WINDOWS = {
+    "Adaptive (existing size limits)": "adaptive",
+    "Half-month (1–15 / 16–end)": "half_month",
+    "Calendar month": "month",
+}
 LABELS = {
     "Tile by tile (default)": EXACT,
     "Original projection / group UTM latitude bands by hemisphere": HEMISPHERE,
@@ -23,13 +28,19 @@ def source_tile(filename: str) -> str:
 
 
 def scope_groups(config: dict) -> dict[str, list[str]]:
-    """Partition selected tiles by the configured native grid, in selection order."""
+    """Partition selected tiles; keep each zone together in first-selection order."""
     grouped = config["mosaic"].get("grouping_mode", EXACT) == HEMISPHERE
     result: dict[str, list[str]] = OrderedDict()
     for tile in config["download"]["utm_tiles"]:
         token = utm_zone_hemisphere_token(tile) if grouped else tile
         if tile not in result.setdefault(token, []):
             result[token].append(tile)
+    if grouped:
+        # Finish both selected hemispheres of a zone before a different zone.
+        # Preserve the first selected zone/hemisphere order, not alphabetical order.
+        zones = list(dict.fromkeys(token[:-1] for token in result))
+        result = OrderedDict((token, result[token]) for zone in zones
+                             for token in result if token[:-1] == zone)
     return result
 
 

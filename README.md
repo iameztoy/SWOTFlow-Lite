@@ -1,4 +1,4 @@
-# SWOTFlow Lite v0.4.0
+# SWOTFlow Lite v0.4.1
 
 A separate, four-tab desktop application for native 100 m SWOT processing and ordinary Earth Engine ingestion through Google Cloud Storage. GeeUp remains a separate application.
 
@@ -41,6 +41,8 @@ In **Project**, check several continents and choose **Add checked continents** t
 The offline map uses the existing bundled UTM grid and continent presets, plus public-domain Natural Earth country outlines. Blue means selected scope, not successful processing or NASA coverage. Presets include all intersecting grid tiles; **Catalogue / plan** checks available acquisitions. Reopen the same project and refresh its plan after adding tiles/dates; retained histories and completed work remain available. See [reference sources](spatial_presets/README.md).
 
 ## Processing scope
+
+**Process Zones** adds a focused zone queue preview and optional adaptive, half-month or calendar-month preparation windows. Complete all dates for each selected zone/hemisphere before the next zone. The normal Process workflow, Cloud settings and source histories remain shared. See [zone scheduling and Resume](docs/lite-setup.md#process-zones-complete-selected-zones-in-bounded-windows).
 
 **Project → Mosaic grouping** defaults to **Tile by tile**. The optional **Original projection / group UTM latitude bands by hemisphere** combines the selected latitude-band tiles within each numbered UTM zone and hemisphere, separately for each UTC acquisition-start date, cycle and pass. Outputs use the full app's `UTM36N` / `UTM36S` convention (north/south); their original source bands remain recorded. No reprojection is performed: north uses EPSG:326xx and south EPSG:327xx, at 100 m. Lowest-quality-code selection keeps elevation and quality paired.
 

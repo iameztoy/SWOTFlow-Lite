@@ -17,7 +17,7 @@ from swotflow.processing.download import normalize_utm_tiles, validate_date_text
 from swotflow.earthengine.cloud.config import CloudConfig
 
 LITE_DEFAULTS = {"schema_version": 1, "batch_mosaics": 50, "batch_source_gib": 2.0,
-                 "max_prepared_gib": 20.0, "min_free_gib": 10.0,
+                 "max_prepared_gib": 20.0, "min_free_gib": 10.0, "zone_batch_window": "adaptive",
                  "mode": "prepare", "cleanup_intermediates": True, "cleanup_mosaics": True}
 
 
@@ -90,6 +90,9 @@ def validate(config: dict, *, cloud: bool = False) -> None:
     for key in ("batch_source_gib", "max_prepared_gib", "min_free_gib"):
         if not math.isfinite(float(settings[key])) or float(settings[key]) <= 0:
             raise ValueError(key + " must be a positive, finite GiB value.")
+    from swotflow_lite.grouping import WINDOWS
+    if settings.get("zone_batch_window", "adaptive") not in WINDOWS.values():
+        raise ValueError("Select a supported zone processing window.")
     if settings["mode"] not in {"prepare", "automatic"}:
         raise ValueError("Select Prepare locally or Fully automatic.")
     if config["extract"].get("target_crs_mode") != "original" or config["mosaic"].get("grouping_mode") not in {"utm_zone", "utm_zone_hemisphere"}:

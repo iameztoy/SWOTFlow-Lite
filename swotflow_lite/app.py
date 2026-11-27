@@ -20,7 +20,8 @@ from swotflow_lite import project as model, planner, runner, statistics
 from swotflow_lite.tile_selection import ContinentPicker, TileMapDialog, combine_continents
 from swotflow_lite.statistics_ui import StatisticsPanel
 from swotflow_lite.statistics_details import requested_scope, nasa_search_details, export_statistics
-from swotflow_lite.grouping import LABELS, EXACT
+from swotflow_lite.grouping import LABELS, EXACT, WINDOWS
+from swotflow_lite.zone_ui import ZonePanel
 
 
 class LiteApp:
@@ -35,7 +36,7 @@ class LiteApp:
         ttk.Label(root,textvariable=self.title,font=("Segoe UI",12,"bold")).pack(anchor="w",padx=14,pady=10)
         self.notebook=ttk.Notebook(root); self.notebook.pack(fill="both",expand=True,padx=12)
         self.tabs={}
-        for name in ("Project", "Process", "Cloud", "Statistics"):
+        for name in ("Project", "Process", "Process Zones", "Cloud", "Statistics"):
             outer=ttk.Frame(self.notebook); self.notebook.add(outer,text=name)
             if name=="Statistics":
                 frame=ttk.Frame(outer,padding=12);frame.pack(fill="both",expand=True)
@@ -48,7 +49,7 @@ class LiteApp:
             canvas.bind("<MouseWheel>",lambda e,c=canvas:c.yview_scroll(int(-e.delta/120),"units"))
             frame.columnconfigure(1,weight=1); self.tabs[name]=frame
         self.vars={}
-        self._project_tab(); self._process_tab(); self._cloud_tab(); self._statistics_tab()
+        self._project_tab(); self._process_tab(); self.zone_panel=ZonePanel(self,self.tabs["Process Zones"]); self._cloud_tab(); self._statistics_tab()
         self.status=tk.StringVar(value="Ready. No project data is stored in the application folder.")
         ttk.Label(root,textvariable=self.status,wraplength=1080).pack(fill="x",padx=12,pady=5)
         self.log=tk.Text(root,height=9,wrap="word",state="disabled"); self.log.pack(fill="both",padx=12,pady=(0,8))
@@ -197,6 +198,7 @@ class LiteApp:
             "download_threads":c["download"]["threads"],"download_batch":c["download"]["batch_size"],"extract_workers":c["extract"]["workers"],"mosaic_workers":c["mosaic"]["workers"]}
         values.update({k:l[k] for k in ("batch_mosaics","batch_source_gib","max_prepared_gib","min_free_gib")})
         values['grouping']=next(label for label,mode in LABELS.items() if mode==c['mosaic'].get('grouping_mode',EXACT))
+        values['zone_window']=next(label for label,window in WINDOWS.items() if window==l.get('zone_batch_window','adaptive'))
         for k,v in values.items():self.vars[k].set(str(v))
         self.continents.reset()
         self.vars["manual_plan"].set(""); self.mode.set(l["mode"])
@@ -220,7 +222,7 @@ class LiteApp:
             c["gdal"]["python"]=v["gdal"];c["destination_parent"]=v["destination"]
             c["cloud_upload"].update(project=v["cloud_project"],bucket=v["bucket"],prefix=v["prefix"],concurrent_uploads=int(v["transfers"]),staging_limit_gib=float(v["staging_gib"]),delete_after_verification=self.cloud_cleanup.get())
             c["upload"].update(backend="gcs",max_active_ingestions=int(v["ingestions"]),completion_mode="wait_for_ee")
-            c["lite"].update(mode=self.mode.get(),batch_mosaics=int(v["batch_mosaics"]),cleanup_intermediates=self.intermediate.get(),cleanup_mosaics=self.mosaic_cleanup.get())
+            c["lite"].update(mode=self.mode.get(),batch_mosaics=int(v["batch_mosaics"]),cleanup_intermediates=self.intermediate.get(),cleanup_mosaics=self.mosaic_cleanup.get(),zone_batch_window=WINDOWS[v["zone_window"]])
             for k in ("batch_source_gib","max_prepared_gib","min_free_gib"):c["lite"][k]=float(v[k])
             c["cleanup"].update(mosaics_enabled=self.mosaic_cleanup.get(),mosaic_policy="confirmed_ingestion")
             changed=requested_scope(c)!=requested_scope(self.project.config) or c.get("destination_parent")!=self.project.config.get("destination_parent")

@@ -72,7 +72,11 @@ def storage_problem(project: object, batch: dict) -> str:
     limits = project.config["lite"]
     retained = sum(p.stat().st_size for p in (project.root/"03_mosaics").rglob("*") if p.is_file())
     if retained >= float(limits["max_prepared_gib"]) * 2**30:
-        return "Prepared-mosaic storage limit reached. Import/verify and clean existing mosaics, or raise the limit, then Resume."
+        return (f"Prepared-mosaic storage limit reached: {retained/2**30:.1f} GiB retained; "
+                f"configured limit {float(limits['max_prepared_gib']):.1f} GiB; "
+                f"{shutil.disk_usage(project.root).free/2**30:.1f} GiB free on disk. "
+                "This is a retained-mosaic cap, not a full disk. Raise it in Process and Resume, "
+                "or import/verify in EE before guarded cleanup. Keep unuploaded mosaics.")
     if batch["source_bytes"] > float(limits["batch_source_gib"]) * 2**30:
         return "One complete acquisition day exceeds the source-byte batch limit. Increase that limit explicitly; its inputs will not be split."
     free = shutil.disk_usage(project.root).free
@@ -152,7 +156,7 @@ def run(project: object, stop: threading.Event, progress: Callable[[str], None] 
     with lite_lock(project.root):
         if automatic:
             sync_and_cleanup(project, progress)
-        for batch in plan["batches"]:
+        for batch_number, batch in enumerate(plan["batches"], 1):
             if stop.is_set():
                 progress("Stopped between batches; Resume preserves completed stages.")
                 break
@@ -190,7 +194,8 @@ def run(project: object, stop: threading.Event, progress: Callable[[str], None] 
             previous = engine.load_automation_run_state(state_path) if state_path.exists() else None
             batch.update(state="running", run_dir=str(folder), run_mode=mode, detail="")
             write_json(path, plan)
-            progress(f"{batch['tile']} {batch['start']} to {batch['end']}: {len(batch['expected'])} originals, about {batch['groups']} mosaics")
+            progress(f"Batch {batch_number}/{len(plan['batches'])}: {batch['tile']} "
+                     f"{batch['start']} to {batch['end']}: {len(batch['expected'])} originals, about {batch['groups']} mosaics")
             try:
                 if config['mosaic'].get('grouping_mode') == HEMISPHERE:
                     from swotflow_lite.grouped_runner import run_group_batch

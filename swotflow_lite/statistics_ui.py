@@ -14,7 +14,7 @@ from swotflow_lite.tile_selection import selection_geometry, country_reference, 
 
 GROUPS = {
     "Overview": {"metrics":"All totals", "stage_status_counts":"Stage outcomes"},
-    "Tiles and dates": {"tiles":"Finished and pending tiles", "years":"Entire period by tile/year", "batches":"Processing batches",
+    "Tiles and dates": {"tiles":"Finished and pending tiles", "years":"Entire period by tile/year", "batches":"Processing batches", "zones":"Zone / hemisphere coverage",
                         "upload_qa_tile_rows":"Pipeline records by tile", "tile_counts":"Download/extraction records by tile", "date_counts":"Records by acquisition date"},
     "Files and lineage": {"preferred_inputs":"Preferred NASA inputs in plan", "download_manifest":"Every recorded download", "extract_manifest":"Every recorded extraction", "mosaic_lineage_rows":"Source-to-mosaic lineage"},
     "Processing versions": {"processing_level_counts":"Versions across stages", "processing_level_tile_counts":"Versions by tile", "product_version_audit_rows":"Version findings"},
@@ -41,7 +41,8 @@ DEFAULT_NOTES = {
 LEADING_COLUMNS = {
     "tiles":("tile","state","expected","verified","pending","years_checked","years_requested","start","end"),
     "years":("tile","year","state","expected","verified","pending","catalogue_checked","start","end"),
-    "batches":("tile","start","end","state","expected","verified","detail"),
+    "batches":("order","tile","start","end","processing_window","state","mosaics","expected","verified","detail"),
+    "zones":("grid","source_tiles","state","expected","verified","mosaics","batches","locally_ready_batches","verified_batches","start","end"),
     "preferred_inputs":("filename","tile","crid","counter","ee_verified","download_status","extraction_status"),
     "download_manifest":("file_name","utm_tile","last_status","downloaded","last_downloaded","raw_exists"),
     "extract_manifest":("input_nc","output_tif","status","updated_at"),

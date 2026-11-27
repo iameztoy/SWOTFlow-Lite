@@ -1,4 +1,5 @@
 """Optional hemisphere scheduling: exact membership, safe Resume and attribution."""
+import gc
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -184,7 +185,11 @@ class GroupingTests(unittest.TestCase):
         self.assertTrue(state.stopped);self.assertFalse(events)
 
     def test_ui_persists_mode_and_refuses_switching_existing_plan(self):
-        root=tk.Tk();root.withdraw();self.addCleanup(root.destroy)
+        root=tk.Tk();root.withdraw()
+        def dispose():
+            for timer in root.tk.call('after','info'):root.after_cancel(timer)
+            root.update_idletasks();root.destroy();gc.collect()
+        self.addCleanup(dispose)
         app=LiteApp(root,auto_statistics=False);app.apply(self.project)
         self.assertEqual(g.LABELS[app.vars['grouping'].get()],g.HEMISPHERE)
         self.assertTrue(app.save())

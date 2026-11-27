@@ -1,5 +1,15 @@
 # SWOTFlow Lite validation
 
+## v0.4.1 — bounded zone windows and a focused workflow view
+
+The UI-environment suite ran **878 tests: 853 passed, 25 environment/opt-in skips**. A separate configured-GDAL run passed all **53 raster/planning checks**, including the 21 GDAL-dependent checks skipped by the UI environment. Combined coverage is **874 unique passing checks and four remaining skips** (three inherited browser DOM tests and a Windows symlink privilege test). All 14 new zone scheduling/UI checks passed. No dependencies or Python version support changed; a new Python 3.12 installation was not repeated.
+
+The suite uses main-thread cyclic collection for Tk fixtures; initial ordinary discovery exposed destroyed Tk interpreters being collected by unrelated worker tests. Windows multiprocessing also requires a real script/module entry point. The maintained `python -m tests.run_suite` runner captures these constraints without changing the assertions. Initial test-launch failures remain in the separate investigation evidence. GDAL checks use the app's runtime configuration to load the already-installed NetCDF driver.
+
+Zone cases cover half-month/month boundaries, leap days, complete-date preservation under a smaller byte limit, first-selected zone order with separate hemispheres, exact source membership, failed refresh protection, preserved started/interrupted batch IDs, local-ready Resume, GUI settings and full-period Statistics. A simulated multi-zone/two-year catalogue contains 30 preferred originals, yielding 18 zone/date mosaics instead of 30 tile/date mosaics; every original is accounted for exactly once. Cloud transport remains covered by the existing simulated automatic/manual suites. This is workflow validation, not a new NASA completeness survey or continent-scale throughput benchmark.
+
+The existing tiny northern/southern NetCDF fixture passed actual extraction, paired quality/elevation mosaicking, interrupted Resume and guarded cleanup. Scientific functions were unchanged. The Process Zones tab, full layout and all window choices were inspected in the desktop app without opening a real project. No NASA originals were downloaded, no Cloud objects or EE assets were created/changed, and no paid service was activated. Investigation outputs remain outside the repository. No routine pixel comparisons were added to the processing workflow.
+
 ## v0.4.0 — optional native hemisphere grouping
 
 The Windows/Python 3.11 suite ran **864 tests: 858 passed, six optional/environment skips**. Two GDAL-dependent tests (the new north/south workflow fixture and the existing source replay/injected-shift oracle) then passed separately using the configured GDAL runtime. Three inherited browser checks and the Windows symlink check remain optional. Dependencies and Python 3.11/3.12 support are unchanged. This release did not repeat the previous clean Python 3.12 installation: that temporary interpreter had been removed after its earlier compatibility test.

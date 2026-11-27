@@ -1,4 +1,5 @@
 """Lite settings and GUI entry points preserve project data across operations."""
+import gc
 from copy import deepcopy
 from pathlib import Path
 import tempfile
@@ -25,7 +26,10 @@ class LiteAppTests(unittest.TestCase):
     def dispose(self):
         for timer in self.root.tk.call('after', 'info'):
             self.root.after_cancel(timer)
+        self.root.update_idletasks()
         self.root.destroy()
+        self.app=None; self.root=None
+        gc.collect()
 
     def test_saved_worker_and_route_choices_preserve_paths_and_metadata(self):
         original = deepcopy(self.project.config)
@@ -92,6 +96,37 @@ class LiteAppTests(unittest.TestCase):
         with mock.patch('swotflow_lite.app.TileMapDialog') as dialog:
             self.app.select_map();dialog.assert_not_called()
         self.assertEqual(self.app.vars['tiles'].get(),before)
+
+    def test_zone_view_shares_route_settings_and_saves_window_without_cloud_changes(self):
+        from swotflow_lite.grouping import HEMISPHERE, WINDOWS
+        original=deepcopy(self.project.config)
+        self.app.zone_panel.activate()
+        self.app.vars['zone_window'].set(next(k for k,v in WINDOWS.items() if v=='half_month'))
+        self.app.mode.set('prepare')
+        self.assertTrue(self.app.save())
+        restored=model.open_project(self.project.root)
+        self.assertEqual(restored.config['mosaic']['grouping_mode'],HEMISPHERE)
+        self.assertEqual(restored.config['lite']['zone_batch_window'],'half_month')
+        self.assertEqual(restored.config['cloud_upload'],original['cloud_upload'])
+        for section in ('processing','artifacts','metadata'):
+            self.assertEqual(restored.config[section],original[section])
+        self.app.apply(restored)
+        self.assertEqual(WINDOWS[self.app.vars['zone_window'].get()],'half_month')
+        self.assertIn('Process Zones',[self.app.notebook.tab(t,'text') for t in self.app.notebook.tabs()])
+
+    def test_zone_actions_protect_existing_exact_plan_and_running_worker(self):
+        from swotflow_lite.grouping import EXACT
+        model.write_json(self.project.root/'00_logs/lite_plan.json',{'batches':[]})
+        with mock.patch('swotflow_lite.zone_ui.messagebox.showerror') as error:
+            self.app.zone_panel.activate()
+            self.assertEqual(error.call_count,1)
+        self.assertEqual(self.project.config['mosaic']['grouping_mode'],EXACT)
+        with mock.patch.object(self.app,'launch') as launch, mock.patch('swotflow_lite.zone_ui.messagebox.showerror'):
+            self.app.zone_panel.launch('Zone processing',lambda p:None)
+            launch.assert_not_called()
+            self.app.busy=True
+            self.app.zone_panel.launch('Zone processing',lambda p:None)
+            launch.assert_not_called()
 
     def test_opening_engine_project_without_lite_marker_is_rejected(self):
         from swotflow.project.model import save_project

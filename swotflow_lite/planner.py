@@ -14,7 +14,7 @@ from swotflow.core.metadata import parse_swot_l2_hr_raster_metadata
 from swotflow.catalog.history import CatalogHistory
 from swotflow.verification.pipeline import expected_checksum, product_name
 from swotflow_lite.project import write_json, validate, lite_lock
-from swotflow_lite.grouping import EXACT, HEMISPHERE, scope_groups, source_tile, protect_started_groups
+from swotflow_lite.grouping import EXACT, HEMISPHERE, scope_groups, source_tile, protect_started_groups, WINDOWS
 from swotflow.processing.mosaic import MosaicConfig, group_key
 
 
@@ -29,12 +29,21 @@ def science_identity(config: dict) -> str:
 
 
 def group_batches(granules: list[DownloadGranule], *, target: int, source_gib: float,
-                  expected: dict[str, dict], grouping_mode: str = EXACT) -> list[dict]:
+                  expected: dict[str, dict], grouping_mode: str = EXACT, window: str = "adaptive") -> list[dict]:
     """Accumulate whole acquisition days; a larger day is explicitly oversized.
 
     Day boundaries preserve all cycle/pass/descriptor groups, including overlaps.
     The byte value is provider source volume, not a claim about TIFF expansion.
     """
+    if window not in WINDOWS.values():
+        raise ValueError("Unsupported processing window: " + window)
+    def window_key(day: str) -> str:
+        if window == "month":
+            return day[:7]
+        if window == "half_month":
+            return day[:7] + ("-first" if int(day[8:10]) <= 15 else "-second")
+        return "adaptive"
+
     days: dict[str, list] = defaultdict(list)
     grouping = MosaicConfig(Path('.'), Path('.'), grouping_mode=grouping_mode)
     grids = set()
@@ -66,17 +75,60 @@ def group_batches(granules: list[DownloadGranule], *, target: int, source_gib: f
                        "tile": token, "start": active[0][0], "end": active[-1][0],
                        "expected": checksums, "groups": groups, "source_bytes": volume,
                        "oversized_day": volume > source_gib * 2**30 or groups > target,
-                       "state": "pending", "detail": ""})
+                       "state": "pending", "detail": "", "processing_window": window})
         active.clear()
 
     for day, rows in sorted(days.items()):
         day_bytes = sum(expected[product_name(g.file_name)]["size"] for g, _ in rows)
         groups = {k for _, _, k in active} | {k for _, k in rows}
         size = sum(expected[product_name(g.file_name)]["size"] for _, g, _ in active)
-        if active and (len(groups) > target or size + day_bytes > source_gib * 2**30):
+        if active and (window_key(day) != window_key(active[0][0]) or len(groups) > target or size + day_bytes > source_gib * 2**30):
             finish()
         active.extend((day, granule, key) for granule, key in rows)
     finish()
+    return result
+
+
+def plan_zone_batches(granules: list[DownloadGranule], *, previous: list[dict], token: str,
+                      start: str, end: str, expected: dict[str, dict], target: int,
+                      source_gib: float, window: str) -> list[dict]:
+    """Rebatch only unstarted work; retain completed/interrupted windows and IDs.
+
+    Keeping old windows intact prevents new download scopes overlapping cleaned
+    or partially completed work. Changed NASA membership inside a started window
+    needs explicit replacement review, not an implicit second mosaic.
+    """
+    protected = sorted((b for b in previous if b['tile'] == token
+        and b['end'] >= start and b['start'] <= end
+        and (b.get('run_dir') or b.get('state', 'pending') not in {'pending', 'storage_pause'})),
+        key=lambda b: b['start'])
+    days = defaultdict(list)
+    for granule in granules:
+        stamp = parse_swot_l2_hr_raster_metadata(granule.file_name).fields['range_beginning'][:8]
+        days[date(int(stamp[:4]), int(stamp[4:6]), int(stamp[6:8])).isoformat()].append(granule)
+    ordered = sorted(days)
+    position = 0
+    result = []
+    def append_pending(items: list) -> None:
+        result.extend(group_batches(items, target=target, source_gib=source_gib,
+            expected=expected, grouping_mode=HEMISPHERE, window=window))
+    last_end = ''
+    for old in protected:
+        if old['start'] < start or old['end'] > end or old['start'] <= last_end:
+            raise ValueError('Started zone windows cannot be truncated or overlap. Keep the original scope or use a separate project.')
+        before = []
+        while position < len(ordered) and ordered[position] < old['start']:
+            before.extend(days[ordered[position]]); position += 1
+        append_pending(before)
+        names = []
+        while position < len(ordered) and ordered[position] <= old['end']:
+            names.extend(product_name(g.file_name) for g in days[ordered[position]])
+            position += 1
+        if {n: expected[n] for n in names} != old['expected']:
+            raise ValueError('NASA inputs changed inside an already-started zone batch. Existing checkpoints are preserved; use a separate project/collection for replacement review.')
+        result.append(deepcopy(old))
+        last_end = old['end']
+    append_pending([g for day in ordered[position:] for g in days[day]])
     return result
 
 
@@ -112,9 +164,14 @@ def _build_plan(project: object, progress: Callable[[str], None]) -> dict:
             if snapshot["status"] != "complete":
                 raise ValueError("NASA search is incomplete; no processing plan was replaced.")
             expected = {product_name(c["filename"]): expected_checksum(c) for c in snapshot["candidates"]}
-            current = group_batches(preview.selected_granules, target=config["lite"]["batch_mosaics"],
-                                    source_gib=config["lite"]["batch_source_gib"], expected=expected,
-                                    grouping_mode=grouping_mode)
+            options = dict(target=config["lite"]["batch_mosaics"],
+                           source_gib=config["lite"]["batch_source_gib"], expected=expected)
+            if grouping_mode == HEMISPHERE:
+                current = plan_zone_batches(preview.selected_granules, previous=list(prior.values()),
+                    token=token, start=start, end=end,
+                    window=config["lite"].get("zone_batch_window", "adaptive"), **options)
+            else:
+                current = group_batches(preview.selected_granules, grouping_mode=grouping_mode, **options)
             for batch in current:
                 batch["scan_id"] = preview.history_scan_id
                 if grouping_mode == HEMISPHERE:
@@ -132,7 +189,10 @@ def _build_plan(project: object, progress: Callable[[str], None]) -> dict:
         protect_started_groups(old, batches)
     plan = {"schema_version": 1, "science": signature,
             "scope": {"tiles": list(config["download"]["utm_tiles"]), "start": first, "end": last},
-            "scans": scans, "batches": batches}
+            "scans": scans, "batches": batches,
+            "scheduling": {"zone_batch_window": config["lite"].get("zone_batch_window", "adaptive"),
+                           "batch_mosaics": config["lite"]["batch_mosaics"],
+                           "batch_source_gib": config["lite"]["batch_source_gib"]}}
     if old:
         archive = root/"00_logs/lite_plan_history"/(hashlib.sha256(json.dumps(old,sort_keys=True).encode()).hexdigest()+".json")
         write_json(archive, old)

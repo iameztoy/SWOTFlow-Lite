@@ -102,8 +102,10 @@ Statistics does not create these folders or databases.
 Run the maintained suite from the application checkout:
 
 ```powershell
-.venv/Scripts/python.exe -m unittest discover -s tests -v
+.venv/Scripts/python.exe -m tests.run_suite
 ```
+
+The maintained runner keeps cyclic collection of destroyed Tk fixtures on the main thread, so unrelated worker tests cannot destroy their Tcl interpreters. It preserves unittest assertions and supports explicit module names. Run from a file/module rather than stdin for Windows multiprocessing.
 
 Use the configured GDAL environment for GDAL-dependent checks. Tests use temporary
 folders; no real project or cloud changes are required. Investigation workers are
