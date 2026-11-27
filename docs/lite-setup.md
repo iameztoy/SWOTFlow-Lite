@@ -1,4 +1,4 @@
-# SWOTFlow Lite v0.4.2 — setup and workflow
+# SWOTFlow Lite v0.5.0 — setup and workflow
 
 ## First installation
 
@@ -34,6 +34,7 @@ Use a **new empty collection for a new Lite project**. To extend an existing col
 1. New project: choose a separate data folder; all downloaded, extracted, mosaic, log and history paths are created under it.
 2. Select UTM tiles, full acquisition date range, GDAL Python, Cloud project, bucket and EE ImageCollection ID. Use the comma-separated tile field, **Select on map…**, or check multiple continents and **Add checked continents**. **Use only checked continents** explicitly replaces the list. Leave **Mosaic grouping** at **Tile by tile (default)**, or choose the native zone/hemisphere option before the first plan.
 3. Process: select Prepare locally or Fully automatic. Set complete-mosaic/source-byte batch targets, disk reserve and prepared-mosaic limit. Download network batches are a separate setting.
+   Automatic mode can optionally prepare the next batch while recorded EE ingestions finish. Keep the unfinished-batch limit at 2 initially. Cloud transfers accept 1–16 workers; the independent ingestion and staging limits still apply. See [batch overlap and worker tuning](batch-overlap.md).
 4. Authenticate NASA in the launch console. Credentials are not saved by Lite.
 5. Catalogue / plan queries both official NASA catalogues and records every candidate and preferred-version selection. Review the expected batches. Refresh the plan when extending dates/tiles or reconciling publication changes.
 6. Start / Resume reuses recorded work. Stop after current stage retains checkpoints; sudden shutdown also retains completed receipts. Changing workers/cleanup is supported on Resume; source/scientific/destination changes are not silently accepted.

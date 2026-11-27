@@ -7,7 +7,7 @@ GeeUp / SWOTFlow v0.9.1 engine at commit
 The swotflow package retains the tested source selection, extraction, paired
 mosaicking, manifests, verification, cleanup and Statistics implementations.
 Some compatibility modules/dependencies remain internal; Lite launches only the
-four-tab interface in swotflow_lite. It does not launch ChromeDriver. Keeping the
+Lite interface in swotflow_lite. It does not launch ChromeDriver. Keeping the
 engine avoids rewriting scientific processing merely to simplify the interface.
 
 Lite has its own versions, project marker, batch checkpoints, defaults, launchers
@@ -36,3 +36,11 @@ N/S suffix. Grouped Cloud manifests also identify the grouping mode and source
 tiles. The original GeeUp repository/installation is unchanged.
 
 Lite v0.4.2 ports the shared lossless mosaic encoding, encoding provenance and oversized-staging diagnostics from the GeeUp v0.9.2 candidate. The full application UI is not included.
+
+Lite v0.5.0 adds a Lite-only coordinator for optional batch preparation while
+recorded EE ingestions finish. It reuses the inherited submit-and-continue,
+reconciliation, provenance and cleanup contracts. The packaged Cloud transfer
+configuration/UI ceiling is raised from 8 to 16; the single-writer scheduler,
+independent ingestion admission and byte reservations are unchanged. Source
+selection, extraction and mosaic algorithms are unchanged. Installed GeeUp and
+running Lite pilots are not updated by this isolated development change.

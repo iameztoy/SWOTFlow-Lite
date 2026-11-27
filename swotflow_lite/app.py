@@ -141,7 +141,10 @@ class LiteApp:
         self.intermediate=tk.BooleanVar(value=True); self.mosaic_cleanup=tk.BooleanVar(value=True)
         ttk.Checkbutton(f,text="Clean downloaded/extracted files after verified downstream processing",variable=self.intermediate).grid(row=11,column=0,columnspan=2,sticky="w",pady=5)
         ttk.Checkbutton(f,text="Clean local mosaics only after confirmed EE ingestion + matching provenance",variable=self.mosaic_cleanup).grid(row=12,column=0,columnspan=2,sticky="w",pady=5)
-        actions=ttk.Frame(f); actions.grid(row=13,column=0,columnspan=2,sticky="w",pady=10)
+        self.overlap_ee=tk.BooleanVar(value=False)
+        ttk.Checkbutton(f,text="Automatic mode: prepare the next batch while EE ingests the previous one",variable=self.overlap_ee).grid(row=13,column=0,columnspan=2,sticky="w",pady=5)
+        self.entry("Process",14,"max_pending_batches","Maximum unfinished ingestion batches (1–8)","2")
+        actions=ttk.Frame(f); actions.grid(row=15,column=0,columnspan=2,sticky="w",pady=10)
         self.button(actions,"Authenticate NASA",lambda:self.launch("NASA sign-in",lambda p:authenticate(strategy="interactive",persist=False),save=False,needs_project=False))
         self.button(actions,"Catalogue / plan",lambda:self.launch("NASA catalogue planning",lambda p:planner.build_plan(p,self.emit)))
         self.button(actions,"Start / Resume",lambda:self.launch("Processing",lambda p:runner.run(p,self.stop,self.emit)))
@@ -149,13 +152,15 @@ class LiteApp:
         ttk.Label(f,text="NASA sign-in uses the launch console and stays in memory. Batches never split an acquisition day. "
                   "Source limits and disk reserve are checked before new processing; raster expansion estimates are not a hard disk quota. "
                   "Manual mode pauses as prepared files accumulate. Compression is lossless and shared with Process Zones; "
-                  "existing verified files are reused on Resume. EE tasks already submitted continue if the app closes.",
-                  wraplength=950).grid(row=14,column=0,columnspan=2,sticky="w",pady=10)
+                  "existing verified files are reused on Resume. EE tasks already submitted continue if the app closes. "
+                  "Overlap applies to both tile and zone processing, keeps pending files, and verifies remaining tasks at run end. "
+                  "Worker counts are ceilings, not speed guarantees; increase gradually within RAM, disk and network limits.",
+                  wraplength=950).grid(row=16,column=0,columnspan=2,sticky="w",pady=10)
 
     def _cloud_tab(self) -> None:
         """Offer automatic transfer and explicit registration of manual uploads."""
         f=self.tabs["Cloud"]
-        for row,key,label,value in ((0,"transfers","Concurrent Cloud transfers (1–8)","2"),(1,"ingestions","Maximum active EE ingestions","2"),
+        for row,key,label,value in ((0,"transfers","Concurrent Cloud transfers (1–16)","2"),(1,"ingestions","Maximum active EE ingestions","2"),
             (2,"staging_gib","Automatic staging cap (GiB)","3"),(3,"prefix","App-owned staging prefix","swotflow-lite")):
             self.entry("Cloud",row,key,label,value)
         self.cloud_cleanup=tk.BooleanVar(value=True)
@@ -203,6 +208,7 @@ class LiteApp:
             "transfers":cloud.get("concurrent_uploads",2),"ingestions":c["upload"].get("max_active_ingestions",2),"staging_gib":cloud.get("staging_limit_gib",3),"prefix":cloud.get("prefix","swotflow-lite"),
             "download_threads":c["download"]["threads"],"download_batch":c["download"]["batch_size"],"extract_workers":c["extract"]["workers"],"mosaic_workers":c["mosaic"]["workers"]}
         values.update({k:l[k] for k in ("batch_mosaics","batch_source_gib","max_prepared_gib","min_free_gib")})
+        values['max_pending_batches']=l.get('max_pending_batches',2)
         values['compression']=COMPRESSION_LABEL_BY_VALUE[c['mosaic'].get('compression','none')]
         values['grouping']=next(label for label,mode in LABELS.items() if mode==c['mosaic'].get('grouping_mode',EXACT))
         values['zone_window']=next(label for label,window in WINDOWS.items() if window==l.get('zone_batch_window','adaptive'))
@@ -211,6 +217,7 @@ class LiteApp:
         self.vars["manual_plan"].set(""); self.mode.set(l["mode"])
         self.intermediate.set(l["cleanup_intermediates"]);self.mosaic_cleanup.set(l["cleanup_mosaics"])
         self.cloud_cleanup.set(cloud.get("delete_after_verification",True))
+        self.overlap_ee.set(l.get('overlap_ee_ingestion',False))
         self.title.set(f"SWOTFlow Lite v{__version__} — {project.root}")
         self.stats_generation+=1;self.statistics_panel.clear()
         if self.auto_statistics:self.refresh_statistics()
@@ -231,6 +238,15 @@ class LiteApp:
             c["cloud_upload"].update(project=v["cloud_project"],bucket=v["bucket"],prefix=v["prefix"],concurrent_uploads=int(v["transfers"]),staging_limit_gib=float(v["staging_gib"]),delete_after_verification=self.cloud_cleanup.get())
             c["upload"].update(backend="gcs",max_active_ingestions=int(v["ingestions"]),completion_mode="wait_for_ee")
             c["lite"].update(mode=self.mode.get(),batch_mosaics=int(v["batch_mosaics"]),cleanup_intermediates=self.intermediate.get(),cleanup_mosaics=self.mosaic_cleanup.get(),zone_batch_window=WINDOWS[v["zone_window"]])
+            c["lite"].update(overlap_ee_ingestion=self.overlap_ee.get(),max_pending_batches=int(v['max_pending_batches']))
+            from swotflow_lite.overlap import completion_mode
+            c['upload']['completion_mode']=completion_mode(c)
+            if not 1 <= c['lite']['max_pending_batches'] <= 8:
+                raise ValueError('Maximum unfinished ingestion batches must be between 1 and 8.')
+            if not 1 <= c['cloud_upload']['concurrent_uploads'] <= 16:
+                raise ValueError('Concurrent Cloud transfers must be between 1 and 16.')
+            if any(value < 1 for value in (c['download']['threads'],c['download']['batch_size'],c['extract']['workers'],c['mosaic']['workers'])):
+                raise ValueError('Download, extraction and mosaic worker counts and network batch size must be positive.')
             for k in ("batch_source_gib","max_prepared_gib","min_free_gib"):c["lite"][k]=float(v[k])
             c["cleanup"].update(mosaics_enabled=self.mosaic_cleanup.get(),mosaic_policy="confirmed_ingestion")
             changed=requested_scope(c)!=requested_scope(self.project.config) or c.get("destination_parent")!=self.project.config.get("destination_parent")

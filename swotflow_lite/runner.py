@@ -15,6 +15,7 @@ from swotflow.earthengine.cloud.journal import read_rows
 from swotflow_lite.planner import science_identity
 from swotflow_lite.project import validate, write_json, lite_lock
 from swotflow_lite.grouping import HEMISPHERE
+from swotflow_lite import overlap
 
 
 def cloud_rows(project: object) -> list[dict]:
@@ -152,6 +153,7 @@ def run(project: object, stop: threading.Event, progress: Callable[[str], None] 
     if plan["science"] != science_identity(config) or plan["scope"] != current_scope:
         raise ValueError("Scope/scientific settings changed. Refresh the plan before Resume.")
     automatic = config["lite"]["mode"] == "automatic"
+    overlapping = overlap.enabled(config)
     # A project-wide Lite lock prevents a second controller changing batch state.
     with lite_lock(project.root):
         if automatic:
@@ -165,6 +167,12 @@ def run(project: object, stop: threading.Event, progress: Callable[[str], None] 
                 batch.update(state="ee_verified", detail="All preferred sources have matching confirmed EE provenance.")
                 write_json(path, plan)
                 continue
+            if overlapping:
+                if not overlap.wait_for_room(project, plan, stop, progress, current=batch["id"]):
+                    break
+                represented, rows = overlap.refresh(project, plan)
+                if batch_verified(batch, represented) or overlap.submitted(batch, represented, rows):
+                    continue
             if batch["state"] == "locally_ready" and not automatic:
                 continue
             mode = "automatic" if automatic else "prepare"
@@ -175,6 +183,11 @@ def run(project: object, stop: threading.Event, progress: Callable[[str], None] 
                 folder = project.root/'00_logs/lite_runs'/batch['id']/'grouped'
             recovery_ready = batch["state"] == "locally_ready" or completed_local_checkpoint(folder)
             problem = "" if recovery_ready else storage_problem(project, batch)
+            if problem and overlapping and overlap.active_batches(plan, cloud_rows(project)):
+                progress("Local storage limit: waiting for recorded ingestions and guarded cleanup before preparing more data.")
+                if not overlap.wait_for_room(project, plan, stop, progress, drain=True):
+                    break
+                problem = storage_problem(project, batch)
             if problem:
                 batch.update(state="storage_pause", detail=problem)
                 write_json(path, plan); progress(problem); break
@@ -183,7 +196,7 @@ def run(project: object, stop: threading.Event, progress: Callable[[str], None] 
                 base.setdefault(section, {}).update(acquisition_start_date=batch["start"], acquisition_end_date=batch["end"])
             base["download"].update(start_date=batch["start"], end_date=batch["end"], utm_tiles=[batch["tile"]])
             base["cleanup"].update(mosaics_enabled=config["lite"]["cleanup_mosaics"], mosaic_policy="confirmed_ingestion")
-            base["upload"].update(backend="gcs", completion_mode="wait_for_ee")
+            base["upload"].update(backend="gcs", completion_mode=overlap.completion_mode(config))
             # A prepared-only run can later upload using a separate orchestration
             # checkpoint. Scientific receipts prevent downloading/processing again.
             automation = engine.AutomationConfig(project.root, base, [batch["tile"]], batch["start"], batch["end"],
@@ -218,4 +231,16 @@ def run(project: object, stop: threading.Event, progress: Callable[[str], None] 
             write_json(path, plan)
             if batch["state"] in {"paused", "storage_pause"}:
                 break
+        else:
+            if overlapping and not stop.is_set():
+                if overlap.wait_for_room(project, plan, stop, progress, drain=True):
+                    sync_and_cleanup(project, progress)
+                    overlap.refresh(project, plan)
+                    complete = bool(plan["batches"]) and all(b["state"] == "ee_verified" for b in plan["batches"])
+                    plan["pipeline"].update(state="complete" if complete else "attention",
+                        detail="All planned sources verified in EE." if complete else "Some batches require review; no pending or failed files were discarded.")
+                    write_json(path, plan)
+        if overlapping and stop.is_set():
+            plan.setdefault("pipeline", {}).update(state="paused", detail="Stopped after current stage; saved EE tasks may continue remotely.")
+            write_json(path, plan)
         return plan

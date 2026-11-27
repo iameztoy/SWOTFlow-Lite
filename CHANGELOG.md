@@ -1,5 +1,13 @@
 # Release history
 
+## 0.5.0 - 27 November 2026
+
+- Add an optional Automatic mode in Process: prepare the next batch while EE ingests previously submitted mosaics. Applies to exact tiles and native zone/hemisphere groups. Default remains sequential; no change to acquisition grouping, original values or overlap priorities.
+- Bound unfinished ingestion batches (default 2), respect local/bucket storage limits, wait for verification at the end, and preserve uncertain/failed files. Resume polls saved task IDs before replay; worker/overlap changes do not invalidate scientific receipts.
+- Show pending ingestion batches and scheduler status in Statistics; only verified source coverage counts as completed.
+- Allow 1–16 Cloud transfers with independent EE-task and bucket-byte limits and one history writer. Existing transfer defaults remain unchanged. Validate positive download/extraction/mosaic worker settings.
+- Add regression examples for overlap, stops, timeout, Resume, failed ingestion, metadata/history preservation, controls, and 16 concurrent transfers. No extra Cloud services are enabled.
+
 ## 0.4.2 - 27 November 2026
 
 - Add selectable lossless ZSTD/DEFLATE encoding for newly created mosaics, shared by manual and automated processing. Preserve source values, paired quality, masks, grids and metadata; no sparse/lossy options.

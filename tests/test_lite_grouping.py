@@ -184,6 +184,17 @@ class GroupingTests(unittest.TestCase):
         state,events,_=self.run_fake(stop=stop)
         self.assertTrue(state.stopped);self.assertFalse(events)
 
+    def test_grouped_overlap_preserves_stages_and_passes_throughput_mode(self):
+        self.config['lite'].update(mode='automatic',overlap_ee_ingestion=True,max_pending_batches=2)
+        before=planner.science_identity(self.config)
+        config=grouped.group_config(self.project,self.batch,self.root/'run',True)
+        self.assertEqual(config['upload']['completion_mode'],'submit_and_continue')
+        state,events,_=self.run_fake(automatic=True)
+        self.assertFalse(state.errors)
+        self.assertIn(('upload','UTM36N'),events)
+        self.assertIn(('ee_sync','UTM36N'),events)
+        self.assertEqual(planner.science_identity(self.config),before)
+
     def test_ui_persists_mode_and_refuses_switching_existing_plan(self):
         root=tk.Tk();root.withdraw()
         def dispose():

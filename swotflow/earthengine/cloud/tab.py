@@ -38,8 +38,8 @@ class CloudUploadTab:
         controls = ttk.Frame(parent); controls.grid(row=7, column=0, columnspan=3, sticky="ew", pady=8)
         ttk.Checkbutton(controls, text="Remove Cloud staging copies after verified EE ingestion and matching provenance",
                         variable=self.remove).grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Label(controls, text="Concurrent Cloud file transfers (1-8)").grid(row=1, column=0, sticky="w", pady=4)
-        ttk.Spinbox(controls, from_=1, to=8, textvariable=self.concurrent, width=8).grid(row=1, column=1, sticky="w")
+        ttk.Label(controls, text="Concurrent Cloud file transfers (1-16)").grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Spinbox(controls, from_=1, to=16, textvariable=self.concurrent, width=8).grid(row=1, column=1, sticky="w")
         ttk.Label(controls, text="Maximum active EE ingestions (shared with Upload; 0 means 2 for Cloud)").grid(row=2, column=0, sticky="w", pady=4)
         ttk.Entry(controls, textvariable=app.max_active_var, width=8).grid(row=2, column=1, sticky="w")
         ttk.Label(parent, text="Origin folder, destination collection, UTM selection, acquisition metadata, pyramid policy and "

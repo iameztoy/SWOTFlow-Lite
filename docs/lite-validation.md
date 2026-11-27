@@ -1,5 +1,15 @@
 # SWOTFlow Lite validation
 
+## v0.5.0 — optional overlap with EE ingestion
+
+The focused regression suite passed **255 checks**, with no failures or skips. A separate configured-GDAL run passed **49 checks**, including the small north/south extracted-source, mosaic, interrupted Resume and cleanup example. After refining the count of partially submitted batches in Statistics, all **29 targeted scheduler/Statistics checks** passed. These are execution counts, not a claim that all checks are unique or that the entire inherited suite was rerun.
+
+The two-batch scheduler example prepares the second batch while the first remains INGESTING, drains verification at the end and performs no repeated processing on Resume. A separate two-mosaic example uses the actual Cloud uploader, durable journal, metadata/provenance and guarded staging deletion with a simulated remote transport. It verifies exact retained source history and no repeated transfer/task submission. Fault cases cover stop, timeout, failed/uncertain ingestion, source mismatch, local storage pressure and unchanged cleanup rules. Both exact-tile and zone/hemisphere orchestration pass through the selected completion mode.
+
+Sixteen-transfer tests verify concurrent worker execution with a single journal/report writer; other tests retain the independent ingestion and aggregate staged-byte limits. GUI controls round-trip 30 downloads, four extraction/mosaic workers and 16 Cloud transfers without changing scientific identity. The source pixel algorithms and dependencies are unchanged. Python 3.12 syntax remains supported; this change was exercised with the installed 3.11 and configured GDAL environments, not a new clean 3.12 installation.
+
+Remote services are simulated for these feature regressions: this is not a live overlap-speed or billing benchmark. No test assets or paid services were created. The existing February 2025 pilot remains on its frozen v0.4.2 source files; it was not used as an uncontrolled concurrency experiment.
+
 ## v0.4.2 — selectable lossless mosaic compression
 
 The complete suite ran **886 tests: 860 passed, 26 environment/opt-in skips**. All **57 configured-GDAL raster/planning checks** passed separately, including full decoded array/mask equality for both codecs, overlap ties, singletons, separated gaps and both hemispheres. Final GUI checks passed after restoring unchanged Unicode labels. This release preserves Python 3.11/3.12 compatibility without changing dependencies; a clean 3.12 installation was not repeated.
