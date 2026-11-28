@@ -87,7 +87,7 @@ After changing a window or batch limits, run **Catalogue / plan zones** to apply
 
 The app completes a bounded local batch, then transfers mosaics to the bucket. It starts EE ingestion for completed files while other files transfer, verifies the EE metadata and source revision, and removes exact owned staging copies. With local mosaic cleanup enabled, it removes the corresponding TIFFs and sidecars before proceeding. Failed copies remain recorded and protected. Another batch cannot start if retained files or estimated processing headroom exceed the configured disk limits.
 
-Start with two Cloud transfers and two EE ingestions. Transfers can be increased to eight; more workers do not guarantee higher throughput. The staging cap includes tracked reservations and failed retained copies. The app must be running for its verification/deletion work; already submitted EE tasks can continue while the computer is off. On return, Sync EE and Resume catch up.
+Start with two Cloud transfers and two EE ingestions. You can configure 1 to 16 concurrent Cloud transfers. Throughput depends on your connection. The staging cap includes tracked reservations and failed retained copies. The app must be running for its verification/deletion work; already submitted EE tasks can continue while the computer is off. On return, Sync EE and Resume catch up.
 
 ## Manual browser upload route
 

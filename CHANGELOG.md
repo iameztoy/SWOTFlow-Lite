@@ -1,6 +1,6 @@
 # Release history
 
-## 0.5.0 - 27 November 2026
+## 0.5.0 - 28 November 2026
 
 - Add an optional Automatic mode in Process: prepare the next batch while EE ingests previously submitted mosaics. Applies to exact tiles and native zone/hemisphere groups. Default remains sequential; no change to acquisition grouping, original values or overlap priorities.
 - Bound unfinished ingestion batches (default 2), respect local/bucket storage limits, wait for verification at the end, and preserve uncertain/failed files. Resume polls saved task IDs before replay; worker/overlap changes do not invalidate scientific receipts.
