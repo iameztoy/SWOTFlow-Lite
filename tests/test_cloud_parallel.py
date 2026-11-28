@@ -60,12 +60,18 @@ class CloudParallelTests(unittest.TestCase):
             return self.worker._run()
 
     def test_eight_transfers_overlap_but_only_main_thread_writes_history(self):
-        self.add_items(8)
-        self.config.cloud = replace(self.config.cloud, concurrent_uploads=8)
+        self.assert_parallel_transfers(8)
+
+    def test_sixteen_transfers_keep_single_writer_and_saved_operations(self):
+        self.assert_parallel_transfers(16)
+
+    def assert_parallel_transfers(self, count):
+        self.add_items(count)
+        self.config.cloud = replace(self.config.cloud, concurrent_uploads=count)
         self.worker.cloud = self.config.cloud
-        self.config.upload.max_active_ingestions = 8
+        self.config.upload.max_active_ingestions = count
         self.transport.complete_after = 10000
-        barrier = threading.Barrier(8, timeout=3)
+        barrier = threading.Barrier(count, timeout=10)
         main = threading.get_ident()
         writer_threads = []
         original_save = self.worker.save
@@ -79,9 +85,9 @@ class CloudParallelTests(unittest.TestCase):
         with mock.patch.object(self.worker, 'save', side_effect=save):
             self.assertEqual(self.run_worker(), 0)
         self.assertEqual(set(writer_threads), {main})
-        self.assertEqual(len(self.transport.operations), 8)
+        self.assertEqual(len(self.transport.operations), count)
         self.assertTrue(all(r['state']=='INGESTING' for r in self.worker.rows()))
-        self.assertEqual(len(self.transport.objects), 8)
+        self.assertEqual(len(self.transport.objects), count)
 
     def test_ingestion_cap_is_separate_and_verified_copies_are_cleaned(self):
         self.add_items(4)

@@ -90,6 +90,24 @@ class LiteAppTests(unittest.TestCase):
             self.assertFalse(self.app.save())
         self.assertEqual((self.project.root/'project.yaml').read_bytes(), before)
 
+    def test_overlap_and_worker_settings_roundtrip_without_science_changes(self):
+        from swotflow_lite.planner import science_identity
+        before=science_identity(self.project.config)
+        self.app.mode.set('automatic');self.app.overlap_ee.set(True)
+        for key,value in {'max_pending_batches':'2','transfers':'16','download_threads':'30',
+                          'extract_workers':'4','mosaic_workers':'4'}.items():
+            self.app.vars[key].set(value)
+        self.assertTrue(self.app.save())
+        restored=model.open_project(self.project.root)
+        self.assertEqual(science_identity(restored.config),before)
+        self.assertEqual(restored.config['upload']['completion_mode'],'submit_and_continue')
+        self.assertEqual(restored.config['cloud_upload']['concurrent_uploads'],16)
+        self.app.apply(restored)
+        self.assertTrue(self.app.overlap_ee.get())
+        self.assertEqual(self.app.vars['max_pending_batches'].get(),'2')
+        self.app.mode.set('prepare');self.assertTrue(self.app.save())
+        self.assertEqual(self.app.project.config['upload']['completion_mode'],'wait_for_ee')
+
     def test_continents_manual_and_map_selection_save_same_scope_without_history_changes(self):
         original = deepcopy(self.project.config)
         evidence = self.project.root/'00_logs'/'retained_history.json'

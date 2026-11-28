@@ -81,6 +81,8 @@ def snapshot(project: object) -> dict:
     expected = {k:v for b in plan.get("batches", []) for k,v in b["expected"].items()}
     verified = sum(represented.get(k) == v for k,v in expected.items())
     metrics = {"Lite preferred NASA originals in current plan":str(len(expected)),
+               "Lite batch overlap": "enabled" if project.config.get('lite',{}).get('mode') == 'automatic' and project.config.get('lite',{}).get('overlap_ee_ingestion',False) else "disabled",
+               "Lite scheduler status":str(plan.get('pipeline',{}).get('state','sequential')),
                "Lite originals represented in last verified EE assets":str(verified),
                "Lite originals still awaiting verified EE coverage":str(len(expected)-verified),
                "Lite conflicting acquisition ownership":str(len(conflicts)),
@@ -94,6 +96,8 @@ def snapshot(project: object) -> dict:
                     'Lite mosaics with tile-by-tile grouping':str(exact_count),
                     'Lite planned asset reduction from grouping':str(exact_count-grouped_count)})
     cloud = cloud_rows(project)
+    from swotflow_lite.overlap import active_batches
+    metrics['Lite ingestion batches awaiting verification'] = str(len(active_batches(plan, cloud))) if plan else '0'
     manual = [r for r in cloud if r.get("manual_import")]
     metrics.update({
         "Manual batches: source copies removed":str(sum(bool(r["manual_import"].get("deleted_at")) for r in manual)),

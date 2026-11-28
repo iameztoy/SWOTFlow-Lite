@@ -18,7 +18,8 @@ from swotflow.earthengine.cloud.config import CloudConfig
 
 LITE_DEFAULTS = {"schema_version": 1, "batch_mosaics": 50, "batch_source_gib": 2.0,
                  "max_prepared_gib": 20.0, "min_free_gib": 10.0, "zone_batch_window": "adaptive",
-                 "mode": "prepare", "cleanup_intermediates": True, "cleanup_mosaics": True}
+                 "mode": "prepare", "cleanup_intermediates": True, "cleanup_mosaics": True,
+                 "overlap_ee_ingestion": False, "max_pending_batches": 2}
 
 
 @contextmanager
@@ -86,6 +87,15 @@ def validate(config: dict, *, cloud: bool = False) -> None:
     if first > last or not normalize_utm_tiles(download.get("utm_tiles", [])):
         raise ValueError("Select UTM tiles and an increasing date range.")
     settings = config["lite"]
+    if type(settings.get("overlap_ee_ingestion", False)) is not bool:
+        raise ValueError("Prepare next batch must be enabled or disabled.")
+    pending = settings.get("max_pending_batches", 2)
+    if type(pending) is not int or not 1 <= pending <= 8:
+        raise ValueError("Maximum unfinished ingestion batches must be between 1 and 8.")
+    for section, key in (("download", "threads"), ("download", "batch_size"), ("extract", "workers"), ("mosaic", "workers")):
+        value = config.get(section, {}).get(key, 1)
+        if type(value) is not int or value < 1:
+            raise ValueError(f"{section}.{key} must be a positive integer.")
     if type(settings["batch_mosaics"]) is not int or not 1 <= settings["batch_mosaics"] <= 500:
         raise ValueError("Batch target must be between 1 and 500 complete mosaics.")
     for key in ("batch_source_gib", "max_prepared_gib", "min_free_gib"):

@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>SWOTFlow Lite v0.4.2 setup</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;color:#163047}pre{white-space:pre-wrap;font:inherit}a{color:#12608a}</style><h1>SWOTFlow Lite v0.4.2</h1><p><a href="cloud-upload-setup.html">Google Cloud setup</a> · <a href="mosaic-compression.md">Mosaic compression</a></p><pre># SWOTFlow Lite v0.4.2 — setup and workflow
+<!doctype html><html lang="en"><meta charset="utf-8"><title>SWOTFlow Lite v0.5.0 setup</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;color:#163047}pre{white-space:pre-wrap;font:inherit}a{color:#12608a}</style><h1>SWOTFlow Lite v0.5.0</h1><p><a href="cloud-upload-setup.html">Google Cloud setup</a> · <a href="batch-overlap.html">Batch overlap and worker tuning</a> · <a href="mosaic-compression.md">Mosaic compression</a></p><pre># SWOTFlow Lite v0.5.0 — setup and workflow
 
 ## First installation
 
@@ -34,6 +34,7 @@ Use a **new empty collection for a new Lite project**. To extend an existing col
 1. New project: choose a separate data folder; all downloaded, extracted, mosaic, log and history paths are created under it.
 2. Select UTM tiles, full acquisition date range, GDAL Python, Cloud project, bucket and EE ImageCollection ID. Use the comma-separated tile field, **Select on map…**, or check multiple continents and **Add checked continents**. **Use only checked continents** explicitly replaces the list. Leave **Mosaic grouping** at **Tile by tile (default)**, or choose the native zone/hemisphere option before the first plan.
 3. Process: select Prepare locally or Fully automatic. Set complete-mosaic/source-byte batch targets, disk reserve and prepared-mosaic limit. Download network batches are a separate setting.
+   Automatic mode can optionally prepare the next batch while recorded EE ingestions finish. Keep the unfinished-batch limit at 2 initially. Cloud transfers accept 1–16 workers; the independent ingestion and staging limits still apply. See [batch overlap and worker tuning](batch-overlap.md).
 4. Authenticate NASA in the launch console. Credentials are not saved by Lite.
 5. Catalogue / plan queries both official NASA catalogues and records every candidate and preferred-version selection. Review the expected batches. Refresh the plan when extending dates/tiles or reconciling publication changes.
 6. Start / Resume reuses recorded work. Stop after current stage retains checkpoints; sudden shutdown also retains completed receipts. Changing workers/cleanup is supported on Resume; source/scientific/destination changes are not silently accepted.
@@ -86,7 +87,7 @@ After changing a window or batch limits, run **Catalogue / plan zones** to apply
 
 The app completes a bounded local batch, then transfers mosaics to the bucket. It starts EE ingestion for completed files while other files transfer, verifies the EE metadata and source revision, and removes exact owned staging copies. With local mosaic cleanup enabled, it removes the corresponding TIFFs and sidecars before proceeding. Failed copies remain recorded and protected. Another batch cannot start if retained files or estimated processing headroom exceed the configured disk limits.
 
-Start with two Cloud transfers and two EE ingestions. Transfers can be increased to eight; more workers do not guarantee higher throughput. The staging cap includes tracked reservations and failed retained copies. The app must be running for its verification/deletion work; already submitted EE tasks can continue while the computer is off. On return, Sync EE and Resume catch up.
+Start with two Cloud transfers and two EE ingestions. You can configure 1 to 16 concurrent Cloud transfers. Throughput depends on your connection. The staging cap includes tracked reservations and failed retained copies. The app must be running for its verification/deletion work; already submitted EE tasks can continue while the computer is off. On return, Sync EE and Resume catch up.
 
 ## Manual browser upload route
 

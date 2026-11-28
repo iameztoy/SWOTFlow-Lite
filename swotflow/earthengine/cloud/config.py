@@ -33,5 +33,5 @@ class CloudConfig:
             raise ValueError("Cloud Upload: staged storage limit must be positive (GiB).")
         if not 1 <= self.chunk_mib <= 128:
             raise ValueError("Cloud Upload: chunk size must be between 1 and 128 MiB.")
-        if not 1 <= self.concurrent_uploads <= 8:
-            raise ValueError("Cloud Upload: concurrent transfers must be between 1 and 8.")
+        if not 1 <= self.concurrent_uploads <= 16:
+            raise ValueError("Cloud Upload: concurrent transfers must be between 1 and 16.")

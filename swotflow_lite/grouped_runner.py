@@ -23,6 +23,7 @@ from swotflow.verification.retention import source_proof_matches
 from swotflow.verification.download import assert_project_not_reset
 from swotflow.verification.file_cache import CleanupHashCache
 from swotflow_lite.grouping import HEMISPHERE, batch_tiles, input_groups
+from swotflow_lite.overlap import completion_mode
 
 
 def group_config(project: object, batch: dict, folder: Path, automatic: bool) -> dict:
@@ -35,7 +36,7 @@ def group_config(project: object, batch: dict, folder: Path, automatic: bool) ->
     for section in ('processing','download'):
         config[section].update(acquisition_start_date=batch['start'],acquisition_end_date=batch['end'])
     config['mosaic'].update(grouping_mode=HEMISPHERE, target_crs_label='')
-    config['upload'].update(backend='gcs',completion_mode='wait_for_ee')
+    config['upload'].update(backend='gcs',completion_mode=completion_mode(project.config))
     config['cleanup'].update(mosaics_enabled=project.config['lite']['cleanup_mosaics'],mosaic_policy='confirmed_ingestion')
     # Raw/extracted cleanup is explicitly member-scoped below. Do not mistake the
     # output's N/S hemisphere token for a source latitude-band tile.

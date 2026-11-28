@@ -1,6 +1,6 @@
-# SWOTFlow Lite v0.4.2
+# SWOTFlow Lite v0.5.0
 
-**v0.4.2: selectable lossless mosaic compression.** ZSTD and DEFLATE preserve decoded values and masks. Shared processing controls, unchanged source history, and Resume reuse of existing verified files. See [compression and existing projects](docs/mosaic-compression.md).
+**v0.5.0: optional batch preparation during EE ingestion.** Automatic processing can prepare the next bounded batch while saved EE tasks finish. Source accounting, Resume and verified cleanup remain shared with the sequential mode. Cloud transfers support 1–16 workers; existing defaults and scientific processing are unchanged. See [batch overlap and worker tuning](docs/batch-overlap.md) and [lossless compression](docs/mosaic-compression.md).
 
 A separate desktop application for native 100 m SWOT processing and ordinary Earth Engine ingestion through Google Cloud Storage. GeeUp remains a separate application.
 
