@@ -1,5 +1,12 @@
 # Release history
 
+## 0.5.1 - 28 November 2026
+
+- Merge Process and Process Zones. Project owns grouping, and Process puts lossless compression and processing mode at the top. Run controls stay visible while scrolling.
+- Show group order and preparation windows for zone projects. Show the overlap control in Automatic mode and the pending-batch limit when overlap is enabled. Existing preferences survive switching modes.
+- Put the Cloud project ID, bucket and EE collection together in Cloud. A bucket URI or invalid bucket-like project ID gets inline guidance and blocks Cloud operations until corrected. Local-only preparation remains available.
+- Use the existing project settings, saved plans, Resume controller, provenance, cleanup rules and Statistics.
+
 ## 0.5.0 - 28 November 2026
 
 - Add an optional Automatic mode in Process: prepare the next batch while EE ingests previously submitted mosaics. Applies to exact tiles and native zone/hemisphere groups. Default remains sequential; no change to acquisition grouping, original values or overlap priorities.

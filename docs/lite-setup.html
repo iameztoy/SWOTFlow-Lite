@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>SWOTFlow Lite v0.5.0 setup</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;color:#163047}pre{white-space:pre-wrap;font:inherit}a{color:#12608a}</style><h1>SWOTFlow Lite v0.5.0</h1><p><a href="cloud-upload-setup.html">Google Cloud setup</a> · <a href="batch-overlap.html">Batch overlap and worker tuning</a> · <a href="mosaic-compression.md">Mosaic compression</a></p><pre># SWOTFlow Lite v0.5.0 — setup and workflow
+<!doctype html><html lang="en"><meta charset="utf-8"><title>SWOTFlow Lite v0.5.1 setup</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:32px auto;padding:0 24px;color:#163047}pre{white-space:pre-wrap;font:inherit}a{color:#12608a}</style><h1>SWOTFlow Lite v0.5.1</h1><p><a href="cloud-upload-setup.html">Google Cloud setup</a> · <a href="batch-overlap.html">Batch overlap and worker tuning</a> · <a href="mosaic-compression.md">Mosaic compression</a></p><pre># SWOTFlow Lite v0.5.1 — setup and workflow
 
 ## First installation
 
@@ -32,8 +32,8 @@ Use a **new empty collection for a new Lite project**. To extend an existing col
 ## Project and plan
 
 1. New project: choose a separate data folder; all downloaded, extracted, mosaic, log and history paths are created under it.
-2. Select UTM tiles, full acquisition date range, GDAL Python, Cloud project, bucket and EE ImageCollection ID. Use the comma-separated tile field, **Select on map…**, or check multiple continents and **Add checked continents**. **Use only checked continents** explicitly replaces the list. Leave **Mosaic grouping** at **Tile by tile (default)**, or choose the native zone/hemisphere option before the first plan.
-3. Process: select Prepare locally or Fully automatic. Set complete-mosaic/source-byte batch targets, disk reserve and prepared-mosaic limit. Download network batches are a separate setting.
+2. In **Project**, select UTM tiles, the acquisition date range and GDAL Python. In **Cloud**, enter the Google Cloud project ID (for example, `hardy-tenure-383607`), the bare bucket name (`swot_hr100m`) and your EE ImageCollection ID. Use the comma-separated tile field, **Select on map…**, or check multiple continents and **Add checked continents**. **Use only checked continents** explicitly replaces the list. Leave **Mosaic grouping** at **Tile by tile (default)**, or choose the native zone/hemisphere option before the first plan.
+3. **Process** shows the grouping selected in Project. Choose **Mosaic compression** and your processing mode. Expand **Show performance, storage and cleanup settings** to set complete-mosaic/source-byte batch targets, the disk reserve, cleanup and the prepared-mosaic limit. Download network batches are a separate setting.
    Automatic mode can optionally prepare the next batch while recorded EE ingestions finish. Keep the unfinished-batch limit at 2 initially. Cloud transfers accept 1–16 workers; the independent ingestion and staging limits still apply. See [batch overlap and worker tuning](batch-overlap.md).
 4. Authenticate NASA in the launch console. Credentials are not saved by Lite.
 5. Catalogue / plan queries both official NASA catalogues and records every candidate and preferred-version selection. Review the expected batches. Refresh the plan when extending dates/tiles or reconciling publication changes.
@@ -61,11 +61,11 @@ Statistics retains the original tile/year/source counts and shows planned mosaic
 
 Choose grouping before the first plan. Existing planned projects retain their mode. New dates/unrelated groups can be added with a refreshed plan, but adding a band or changed source that alters an already-started mosaic is blocked. Such a change needs a reviewed replacement in a separate project/collection; this release does not silently overwrite or rebuild earlier grouped assets. The old plan and assets are kept intact.
 
-## Process Zones: complete selected zones in bounded windows
+## Zone processing in the Process tab
 
-Keep **Project** as the single source of area/date selection. Combine Europe and Africa, or choose individual bands manually. Select **Original projection / group UTM latitude bands by hemisphere** before the first plan, either in Project or with **Process Zones → Use zone/hemisphere grouping**. An existing tile-by-tile project must not be switched after planning: start a separate project/collection for that change.
+Keep **Project** as the single source of area/date selection. Combine Europe and Africa, or choose individual bands manually. Select **Original projection / group UTM latitude bands by hemisphere** in Project before the first plan. Saving a plan locks its grouping. An existing tile-by-tile project must not be switched after planning: start a separate project/collection for that change.
 
-**Process Zones** is a focused view of the same controller, not a second independent workflow. It shares the local/automatic transfer choice with Process. Worker counts, source-byte/mosaic limits, disk reserve and cleanup remain in **Process**; destinations and transfers remain in **Cloud**. Only one operation can run on a project. Editing controls never changes the active worker&#x27;s frozen settings.
+The **Zone processing** section appears in **Process** when the project uses zone/hemisphere grouping. The table previews the selected bands and group order. Statistics shows saved batches and verified progress. Both groupings share the same Authenticate NASA, Catalogue / plan, Start / Resume and Stop controls. Overlap is available in Fully automatic mode. Switching to local preparation keeps the overlap preference for your next automatic run.
 
 The queue takes the first selected numbered zone, finishes the entire requested period for one selected hemisphere, finishes its other selected hemisphere if present, then moves to the next numbered zone. It gathers all selected latitude bands in a group before producing its mosaics. Northern and southern outputs remain separate; grouping does not implicitly add omitted bands or fill genuine NASA nodata.
 
@@ -129,5 +129,5 @@ Use Billing → Reports, filter to the project and Cloud Storage, group by SKU. 
 
 ## Lossless mosaic compression
 
-In **Process** or **Process Zones**, choose **Mosaic compression**. Both views share one setting. New projects use ZSTD; existing projects keep their saved setting (older projects without it remain uncompressed). DEFLATE is also available. All three options preserve values, quality codes, masks and native grids. The choice applies to newly created mosaics in both prepare-only and fully automatic workflows. Resume reuses already verified mosaics; it does not recompress or reupload them. See [compression details](mosaic-compression.md).
+Choose **Mosaic compression** at the top of **Process**. New projects use ZSTD; existing projects keep their saved setting (older projects without it remain uncompressed). DEFLATE is also available. All three options preserve values, quality codes, masks and native grids. The choice applies to newly created mosaics in both prepare-only and fully automatic workflows. Resume reuses already verified mosaics; it does not recompress or reupload them. See [compression details](mosaic-compression.md).
 </pre></html>

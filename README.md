@@ -1,6 +1,6 @@
-# SWOTFlow Lite v0.5.0
+# SWOTFlow Lite v0.5.1
 
-**v0.5.0: optional batch preparation during EE ingestion.** Automatic processing can prepare the next bounded batch while saved EE tasks finish. Source accounting, Resume and verified cleanup remain shared with the sequential mode. Cloud transfers support 1–16 workers; existing defaults and scientific processing are unchanged. See [batch overlap and worker tuning](docs/batch-overlap.md) and [lossless compression](docs/mosaic-compression.md).
+**v0.5.1 brings tile and zone runs into one Process tab.** Choose grouping in Project. Process shows compression, processing mode and the run controls for either grouping. Cloud holds your project ID, bucket, collection and transfer settings. See the [setup guide](docs/lite-setup.md), [batch and worker settings](docs/batch-overlap.md) and [lossless compression options](docs/mosaic-compression.md).
 
 A separate desktop application for native 100 m SWOT processing and ordinary Earth Engine ingestion through Google Cloud Storage. GeeUp remains a separate application.
 
@@ -44,7 +44,7 @@ The offline map uses the existing bundled UTM grid and continent presets, plus p
 
 ## Processing scope
 
-**Process Zones** adds a focused zone queue preview and optional adaptive, half-month or calendar-month preparation windows. Complete all dates for each selected zone/hemisphere before the next zone. The normal Process workflow, Cloud settings and source histories remain shared. See [zone scheduling and Resume](docs/lite-setup.md#process-zones-complete-selected-zones-in-bounded-windows).
+For zone grouping, **Process** shows the selected bands in processing order and the adaptive, half-month or calendar-month preparation window. Each zone/hemisphere goes through the requested dates before the next group. See [zone scheduling and Resume](docs/lite-setup.md#zone-processing-in-the-process-tab).
 
 **Project → Mosaic grouping** defaults to **Tile by tile**. The optional **Original projection / group UTM latitude bands by hemisphere** combines the selected latitude-band tiles within each numbered UTM zone and hemisphere, separately for each UTC acquisition-start date, cycle and pass. Outputs use the full app's `UTM36N` / `UTM36S` convention (north/south); their original source bands remain recorded. No reprojection is performed: north uses EPSG:326xx and south EPSG:327xx, at 100 m. Lowest-quality-code selection keeps elevation and quality paired.
 

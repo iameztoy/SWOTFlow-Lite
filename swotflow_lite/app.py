@@ -12,6 +12,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import webbrowser
 
+from swotflow.earthengine.cloud.config import project_id_error
 from swotflow.paths import APP_ROOT
 from swotflow.project.model import save_project
 from swotflow.processing.download import normalize_utm_tiles, authenticate
@@ -37,11 +38,16 @@ class LiteApp:
         ttk.Label(root,textvariable=self.title,font=("Segoe UI",12,"bold")).pack(anchor="w",padx=14,pady=10)
         self.notebook=ttk.Notebook(root); self.notebook.pack(fill="both",expand=True,padx=12)
         self.tabs={}
-        for name in ("Project", "Process", "Process Zones", "Cloud", "Statistics"):
+        for name in ("Project", "Process", "Cloud", "Statistics"):
             outer=ttk.Frame(self.notebook); self.notebook.add(outer,text=name)
             if name=="Statistics":
                 frame=ttk.Frame(outer,padding=12);frame.pack(fill="both",expand=True)
                 self.tabs[name]=frame;continue
+            if name == "Cloud":
+                self.cloud_page = outer
+            if name == "Process":
+                self.process_actions = ttk.Frame(outer, padding=(12, 6))
+                self.process_actions.pack(side="bottom", fill="x")
             canvas=tk.Canvas(outer,highlightthickness=0); bar=ttk.Scrollbar(outer,orient="vertical",command=canvas.yview)
             canvas.configure(yscrollcommand=bar.set); bar.pack(side="right",fill="y"); canvas.pack(fill="both",expand=True)
             frame=ttk.Frame(canvas,padding=14); window=canvas.create_window((0,0),window=frame,anchor="nw")
@@ -50,7 +56,7 @@ class LiteApp:
             canvas.bind("<MouseWheel>",lambda e,c=canvas:c.yview_scroll(int(-e.delta/120),"units"))
             frame.columnconfigure(1,weight=1); self.tabs[name]=frame
         self.vars={}
-        self._project_tab(); self._process_tab(); self.zone_panel=ZonePanel(self,self.tabs["Process Zones"]); self._cloud_tab(); self._statistics_tab()
+        self._project_tab(); self._process_tab(); self._cloud_tab(); self._statistics_tab()
         self.status=tk.StringVar(value="Ready. No project data is stored in the application folder.")
         ttk.Label(root,textvariable=self.status,wraplength=1080).pack(fill="x",padx=12,pady=5)
         self.log=tk.Text(root,height=9,wrap="word",state="disabled"); self.log.pack(fill="both",padx=12,pady=(0,8))
@@ -58,18 +64,21 @@ class LiteApp:
         self.notebook.bind("<<NotebookTabChanged>>",self.statistics_selected)
         if auto_statistics:root.after(30000,self.poll_statistics)
 
-    def entry(self, tab: str, row: int, key: str, label: str, value: str="") -> None:
+    def entry(self, tab: str | ttk.Frame, row: int, key: str, label: str, value: str="") -> ttk.Entry:
         """Add an editable setting with a shared variable."""
-        frame=self.tabs[tab]; self.vars[key]=tk.StringVar(value=value)
+        frame=self.tabs[tab] if isinstance(tab, str) else tab
+        self.vars[key]=tk.StringVar(value=value)
         ttk.Label(frame,text=label).grid(row=row,column=0,sticky="w",pady=5,padx=(0,16))
-        ttk.Entry(frame,textvariable=self.vars[key]).grid(row=row,column=1,sticky="ew",pady=5)
+        field = ttk.Entry(frame, textvariable=self.vars[key])
+        field.grid(row=row, column=1, sticky="ew", pady=5)
+        return field
 
     def button(self, parent: object, text: str, command: object) -> None:
         """Register operation buttons so overlapping runs are disabled."""
         b=ttk.Button(parent,text=text,command=command); b.pack(side="left",padx=(0,8));self.buttons.append(b)
 
     def _project_tab(self) -> None:
-        """Display scope and Cloud destination without browser automation controls."""
+        """Set the project scope and its native mosaic grouping."""
         f=self.tabs["Project"]; actions=ttk.Frame(f); actions.grid(row=0,column=0,columnspan=2,sticky="w",pady=8)
         self.button(actions,"New project",self.new); self.button(actions,"Open project",self.open)
         self.button(actions,"Save settings",self.save)
@@ -91,19 +100,16 @@ class LiteApp:
         ttk.Button(f,text="Browse GDAL Python",command=self.choose_gdal).grid(row=8,column=1,sticky="w")
         self.vars['grouping']=tk.StringVar(value=next(iter(LABELS)))
         ttk.Label(f,text="Mosaic grouping").grid(row=9,column=0,sticky="w",pady=6)
-        ttk.Combobox(f,textvariable=self.vars['grouping'],values=list(LABELS),state='readonly',width=62).grid(row=9,column=1,sticky='ew')
+        self.grouping_combo = ttk.Combobox(f, textvariable=self.vars["grouping"], values=list(LABELS),
+                                          state="readonly", width=62)
+        self.grouping_combo.grid(row=9, column=1, sticky="ew")
+        self.grouping_note = tk.StringVar(value="Choose the grouping before the first Catalogue / plan.")
+        ttk.Label(f, textvariable=self.grouping_note, wraplength=760).grid(row=10, column=1, sticky="w", pady=3)
         ttk.Label(f,text="Native 100 m, no reprojection. Optional hemisphere grouping combines selected latitude-band tiles within the same UTM zone, "
-                  "UTC date, cycle and pass, separately north/south. Choose before your first Catalogue / plan. Grouped batches may need more disk space. "
+                  "UTC date, cycle and pass, separately north/south. Grouped batches may need more disk space. "
                   "Lowest quality code selects the paired elevation/quality; deterministic ties. "
                   "Preferred NASA versions and full filename history are retained. Map boundaries are for selection only; the processing grid stays unchanged.",
-                  wraplength=950).grid(row=10,column=0,columnspan=2,sticky="w",pady=18)
-        self.entry("Project",11,"destination","EE ImageCollection ID")
-        self.entry("Project",12,"cloud_project","Google Cloud project ID")
-        self.entry("Project",13,"bucket","Bucket name (without gs://)")
-        ttk.Label(f,text="Use a new empty EE collection for a new Lite project. To add tiles or dates to an existing collection, "
-                  "reopen its original project and history. Keep automatic and manual upload routes in that same project. "
-                  "Assets without recorded source history prevent safe local cleanup.",
-                  wraplength=950).grid(row=14,column=0,columnspan=2,sticky="w",pady=12)
+                  wraplength=800).grid(row=11,column=0,columnspan=2,sticky="w",pady=12)
 
     def update_tile_count(self) -> None:
         try:self.tile_count.set(f"{len(normalize_utm_tiles(self.vars['tiles'].get()))} tiles selected")
@@ -125,61 +131,148 @@ class LiteApp:
         except (ValueError,OSError) as exc:messagebox.showerror("Tile map",str(exc),parent=self.root)
 
     def _process_tab(self) -> None:
-        """Expose bounded processing and existing worker controls."""
-        f=self.tabs["Process"]; self.mode=tk.StringVar(value="prepare")
-        ttk.Radiobutton(f,text="Prepare locally for manual bucket upload",variable=self.mode,value="prepare").grid(row=0,column=0,columnspan=2,sticky="w")
-        ttk.Radiobutton(f,text="Fully automatic: process → bucket → EE → verified cleanup",variable=self.mode,value="automatic").grid(row=1,column=0,columnspan=2,sticky="w")
-        for row,key,label,value in ((2,"batch_mosaics","Target maximum mosaics per batch","50"),(3,"batch_source_gib","Maximum source data per batch (GiB)","2"),
-            (4,"max_prepared_gib","Pause new processing at retained mosaics (GiB)","20"),(5,"min_free_gib","Minimum free disk reserve (GiB)","10"),
-            (6,"download_threads","Parallel downloads","10"),(7,"download_batch","NASA network batch size","50"),
-            (8,"extract_workers","Extraction workers","4"),(9,"mosaic_workers","Mosaic workers","4")):
-            self.entry("Process",row,key,label,value)
-        self.vars['compression']=tk.StringVar(value=COMPRESSION_LABEL_BY_VALUE['zstd'])
-        ttk.Label(f,text="Mosaic compression").grid(row=10,column=0,sticky="w",pady=5)
-        self.compression_combo=ttk.Combobox(f,textvariable=self.vars['compression'],values=list(COMPRESSION_LABELS),state="readonly",width=42)
-        self.compression_combo.grid(row=10,column=1,sticky="ew",pady=5)
-        self.intermediate=tk.BooleanVar(value=True); self.mosaic_cleanup=tk.BooleanVar(value=True)
-        ttk.Checkbutton(f,text="Clean downloaded/extracted files after verified downstream processing",variable=self.intermediate).grid(row=11,column=0,columnspan=2,sticky="w",pady=5)
-        ttk.Checkbutton(f,text="Clean local mosaics only after confirmed EE ingestion + matching provenance",variable=self.mosaic_cleanup).grid(row=12,column=0,columnspan=2,sticky="w",pady=5)
-        self.overlap_ee=tk.BooleanVar(value=False)
-        ttk.Checkbutton(f,text="Automatic mode: prepare the next batch while EE ingests the previous one",variable=self.overlap_ee).grid(row=13,column=0,columnspan=2,sticky="w",pady=5)
-        self.entry("Process",14,"max_pending_batches","Maximum unfinished ingestion batches (1–8)","2")
-        actions=ttk.Frame(f); actions.grid(row=15,column=0,columnspan=2,sticky="w",pady=10)
-        self.button(actions,"Authenticate NASA",lambda:self.launch("NASA sign-in",lambda p:authenticate(strategy="interactive",persist=False),save=False,needs_project=False))
-        self.button(actions,"Catalogue / plan",lambda:self.launch("NASA catalogue planning",lambda p:planner.build_plan(p,self.emit)))
-        self.button(actions,"Start / Resume",lambda:self.launch("Processing",lambda p:runner.run(p,self.stop,self.emit)))
-        ttk.Button(actions,text="Stop after current stage",command=self.stop.set).pack(side="left")
-        ttk.Label(f,text="NASA sign-in uses the launch console and stays in memory. Batches never split an acquisition day. "
-                  "Source limits and disk reserve are checked before new processing; raster expansion estimates are not a hard disk quota. "
-                  "Manual mode pauses as prepared files accumulate. Compression is lossless and shared with Process Zones; "
-                  "existing verified files are reused on Resume. EE tasks already submitted continue if the app closes. "
-                  "Overlap applies to both tile and zone processing, keeps pending files, and verifies remaining tasks at run end. "
-                  "Worker counts are ceilings, not speed guarantees; increase gradually within RAM, disk and network limits.",
-                  wraplength=950).grid(row=16,column=0,columnspan=2,sticky="w",pady=10)
+        """Use a single set of execution controls for both native groupings."""
+        frame = self.tabs["Process"]
+        ttk.Label(frame, text="Mosaic grouping (set in Project)").grid(row=0, column=0, sticky="w", padx=(0, 16))
+        ttk.Label(frame, textvariable=self.vars["grouping"]).grid(row=0, column=1, sticky="w")
+        self.vars["compression"] = tk.StringVar(value=COMPRESSION_LABEL_BY_VALUE["zstd"])
+        ttk.Label(frame, text="Mosaic compression").grid(row=1, column=0, sticky="w")
+        self.compression_combo = ttk.Combobox(frame, textvariable=self.vars["compression"],
+                                               values=list(COMPRESSION_LABELS), state="readonly")
+        self.compression_combo.grid(row=1, column=1, sticky="ew", pady=6)
+        ttk.Label(frame, text="Applies to new mosaics. All choices preserve the original pixel values.").grid(
+            row=2, column=0, columnspan=2, sticky="w")
+
+        route = ttk.LabelFrame(frame, text="Processing mode", padding=8)
+        route.grid(row=3, column=0, columnspan=2, sticky="ew", pady=8)
+        self.mode = tk.StringVar(value="prepare")
+        ttk.Radiobutton(route, text="Prepare locally for manual bucket upload", variable=self.mode,
+                        value="prepare").grid(row=0, column=0, sticky="w")
+        ttk.Radiobutton(route, text="Fully automatic upload and Earth Engine ingestion", variable=self.mode,
+                        value="automatic").grid(row=1, column=0, sticky="w")
+        self.route_help = tk.StringVar()
+        ttk.Label(route, textvariable=self.route_help, wraplength=740).grid(row=2, column=0, sticky="w", pady=3)
+        self.overlap_ee = tk.BooleanVar(value=False)
+        self.overlap_control = ttk.Checkbutton(route, text="Prepare the next batch while EE ingests the previous one",
+                                               variable=self.overlap_ee)
+        self.overlap_control.grid(row=3, column=0, sticky="w")
+        self.pending_options = ttk.Frame(route)
+        self.pending_options.grid(row=4, column=0, sticky="w")
+        self.entry(self.pending_options, 0, "max_pending_batches", "Maximum unfinished ingestion batches (1–8)", "2")
+        self.mode.trace_add("write", self.update_route_options)
+        self.overlap_ee.trace_add("write", self.update_route_options)
+        self.update_route_options()
+
+        self.zone_panel = ZonePanel(self, frame)
+        self.zone_panel.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        self.zone_panel.refresh()
+        self.advanced_visible = tk.BooleanVar(value=False)
+        ttk.Checkbutton(frame, text="Show performance, storage and cleanup settings", variable=self.advanced_visible,
+                        command=self.toggle_advanced).grid(row=5, column=0, columnspan=2, sticky="w", pady=4)
+        self.advanced = ttk.Frame(frame, padding=(8, 0))
+        self.advanced.columnconfigure(1, weight=1)
+        self.advanced.grid(row=6, column=0, columnspan=2, sticky="ew")
+        for row, (key, label, default) in enumerate((
+            ("batch_mosaics", "Target maximum mosaics per batch", "50"),
+            ("batch_source_gib", "Maximum source data per batch (GiB)", "2"),
+            ("max_prepared_gib", "Pause at retained local mosaics (GiB)", "20"),
+            ("min_free_gib", "Minimum free disk reserve (GiB)", "10"),
+            ("download_threads", "Parallel downloads", "10"),
+            ("download_batch", "NASA network batch size", "50"),
+            ("extract_workers", "Extraction workers", "4"),
+            ("mosaic_workers", "Mosaic workers", "4"),
+        )):
+            self.entry(self.advanced, row, key, label, default)
+        self.intermediate = tk.BooleanVar(value=True)
+        self.mosaic_cleanup = tk.BooleanVar(value=True)
+        ttk.Checkbutton(self.advanced, text="Clean downloaded and extracted files after verified processing",
+                        variable=self.intermediate).grid(row=8, column=0, columnspan=2, sticky="w")
+        ttk.Checkbutton(self.advanced, text="Clean local mosaics after verified EE ingestion and matching provenance",
+                        variable=self.mosaic_cleanup).grid(row=9, column=0, columnspan=2, sticky="w")
+        ttk.Label(self.advanced, text="Batches keep complete acquisition dates together. Prepared mosaics count "
+                  "towards the local limit until removed. Configure Cloud transfers and staging limits in Cloud.",
+                  wraplength=740).grid(row=10, column=0, columnspan=2, sticky="w", pady=5)
+        self.toggle_advanced()
+
+        self.button(self.process_actions, "Authenticate NASA", lambda: self.launch(
+            "NASA sign-in", lambda _: authenticate(strategy="interactive", persist=False), save=False, needs_project=False))
+        self.button(self.process_actions, "Catalogue / plan", lambda: self.launch(
+            "NASA catalogue planning", lambda p: planner.build_plan(p, self.emit)))
+        self.button(self.process_actions, "Start / Resume", lambda: self.launch(
+            "Processing", lambda p: runner.run(p, self.stop, self.emit), cloud=self.mode.get() == "automatic"))
+        ttk.Button(self.process_actions, text="Stop after current stage", command=self.stop.set).pack(side="left")
+
+    def toggle_advanced(self) -> None:
+        if self.advanced_visible.get():
+            self.advanced.grid()
+        else:
+            self.advanced.grid_remove()
+
+    def update_route_options(self, *_args) -> None:
+        automatic = self.mode.get() == "automatic"
+        self.route_help.set("Uploads prepared mosaics to the bucket and verifies EE ingestion. Set the destination in Cloud."
+                            if automatic else "Mosaics stay on disk until uploaded. Use Cloud to prepare and import a manual batch.")
+        if automatic:
+            self.overlap_control.grid()
+        else:
+            self.overlap_control.grid_remove()
+        if automatic and self.overlap_ee.get():
+            self.pending_options.grid()
+        else:
+            self.pending_options.grid_remove()
+
+    def update_grouping_lock(self) -> None:
+        planned = self.project is not None and (self.project.root / "00_logs/lite_plan.json").is_file()
+        self.grouping_combo.configure(state="disabled" if planned or self.busy else "readonly")
+        self.grouping_note.set("The saved plan uses this grouping. Use a separate project and collection to choose another."
+                               if planned else "Choose the grouping before the first Catalogue / plan.")
 
     def _cloud_tab(self) -> None:
         """Offer automatic transfer and explicit registration of manual uploads."""
         f=self.tabs["Cloud"]
+        self.project_field = self.entry("Cloud", 0, "cloud_project", "Google Cloud project ID")
+        self.entry("Cloud", 1, "bucket", "Bucket name (without gs://)")
+        self.cloud_hint = tk.StringVar()
+        ttk.Label(f, textvariable=self.cloud_hint, wraplength=750).grid(row=2, column=0, columnspan=2, sticky="w")
+        for key in ("cloud_project", "bucket"):
+            self.vars[key].trace_add("write", self.update_cloud_hint)
+        self.update_cloud_hint()
+        self.entry("Cloud", 3, "destination", "EE ImageCollection ID")
+        ttk.Label(f, text="Use an empty collection for a new project. To extend a collection, reopen its "
+                  "original Lite project so Resume and cleanup can use its source history.",
+                  wraplength=750).grid(row=4, column=0, columnspan=2, sticky="w", pady=5)
         for row,key,label,value in ((0,"transfers","Concurrent Cloud transfers (1–16)","2"),(1,"ingestions","Maximum active EE ingestions","2"),
             (2,"staging_gib","Automatic staging cap (GiB)","3"),(3,"prefix","App-owned staging prefix","swotflow-lite")):
-            self.entry("Cloud",row,key,label,value)
+            self.entry("Cloud",row+5,key,label,value)
         self.cloud_cleanup=tk.BooleanVar(value=True)
-        ttk.Checkbutton(f,text="Remove verified Cloud staging copies",variable=self.cloud_cleanup).grid(row=4,column=0,columnspan=2,sticky="w",pady=8)
-        self.entry("Cloud",5,"manual_plan","Manual batch plan JSON")
-        actions=ttk.Frame(f); actions.grid(row=6,column=0,columnspan=2,sticky="w",pady=10)
+        ttk.Checkbutton(f,text="Remove verified Cloud staging copies",variable=self.cloud_cleanup).grid(row=9,column=0,columnspan=2,sticky="w",pady=8)
+        self.entry("Cloud",10,"manual_plan","Manual batch plan JSON")
+        actions=ttk.Frame(f); actions.grid(row=11,column=0,columnspan=2,sticky="w",pady=10)
         self.button(actions,"Prepare manual batch",self.prepare_manual)
         self.button(actions,"Choose batch plan",self.choose_plan)
         self.button(actions,"Import / Resume bucket batch",self.import_manual)
-        actions2=ttk.Frame(f); actions2.grid(row=7,column=0,columnspan=2,sticky="w",pady=8)
+        actions2=ttk.Frame(f); actions2.grid(row=12,column=0,columnspan=2,sticky="w",pady=8)
         self.button(actions2,"Upload ready local mosaics",self.upload_ready)
-        self.button(actions2,"Sync EE / clean verified copies",lambda:self.launch("EE sync and cleanup",lambda p:self.sync_locked(p)))
+        self.button(actions2,"Sync EE / clean verified copies",lambda:self.launch("EE sync and cleanup",lambda p:self.sync_locked(p),cloud=True))
         self.button(actions2,"Setup guide",lambda:webbrowser.open((APP_ROOT/"docs/lite-setup.html").as_uri()))
         ttk.Label(f,text="Manual: prepare a batch plan, upload its listed TIFFs into its exact bucket folder using Cloud Console, then import. "
                   "Keep the project records on the controlling computer. Import sends no local raster bytes. It makes a generation-checked server-side "
                   "copy into an app-owned path, submits EE ingestion and removes both copies after verification. This briefly uses extra bucket storage. "
                   "Unlisted files are never adopted or deleted. The automatic staging cap cannot limit your browser uploads. "
                   "Switch upload routes within the same project; a separate project lacks the collection's earlier source history.",
-                  wraplength=950).grid(row=8,column=0,columnspan=2,sticky="w",pady=12)
+                  wraplength=950).grid(row=13,column=0,columnspan=2,sticky="w",pady=12)
+
+    def update_cloud_hint(self, *_args) -> None:
+        project = self.vars["cloud_project"].get().strip()
+        bucket = self.vars["bucket"].get().strip()
+        error = project_id_error(project, bucket) if project else ""
+        if error:
+            self.cloud_hint.set(error)
+        elif project and project == bucket:
+            self.cloud_hint.set("Project ID and bucket have the same name. Confirm that this is the project ID in Cloud Console.")
+        else:
+            self.cloud_hint.set("Example project ID: hardy-tenure-383607. Example bucket name: swot_hr100m.")
+        self.project_field.state(["invalid"] if error else ["!invalid"])
 
     def _statistics_tab(self) -> None:
         """Restore detailed full-app accounting without adding pipeline mutations."""
@@ -213,6 +306,7 @@ class LiteApp:
         values['grouping']=next(label for label,mode in LABELS.items() if mode==c['mosaic'].get('grouping_mode',EXACT))
         values['zone_window']=next(label for label,window in WINDOWS.items() if window==l.get('zone_batch_window','adaptive'))
         for k,v in values.items():self.vars[k].set(str(v))
+        self.update_grouping_lock()
         self.continents.reset()
         self.vars["manual_plan"].set(""); self.mode.set(l["mode"])
         self.intermediate.set(l["cleanup_intermediates"]);self.mosaic_cleanup.set(l["cleanup_mosaics"])
@@ -238,11 +332,20 @@ class LiteApp:
             c["cloud_upload"].update(project=v["cloud_project"],bucket=v["bucket"],prefix=v["prefix"],concurrent_uploads=int(v["transfers"]),staging_limit_gib=float(v["staging_gib"]),delete_after_verification=self.cloud_cleanup.get())
             c["upload"].update(backend="gcs",max_active_ingestions=int(v["ingestions"]),completion_mode="wait_for_ee")
             c["lite"].update(mode=self.mode.get(),batch_mosaics=int(v["batch_mosaics"]),cleanup_intermediates=self.intermediate.get(),cleanup_mosaics=self.mosaic_cleanup.get(),zone_batch_window=WINDOWS[v["zone_window"]])
-            c["lite"].update(overlap_ee_ingestion=self.overlap_ee.get(),max_pending_batches=int(v['max_pending_batches']))
-            from swotflow_lite.overlap import completion_mode
-            c['upload']['completion_mode']=completion_mode(c)
-            if not 1 <= c['lite']['max_pending_batches'] <= 8:
-                raise ValueError('Maximum unfinished ingestion batches must be between 1 and 8.')
+            c["lite"]["overlap_ee_ingestion"] = self.overlap_ee.get()
+            from swotflow_lite.overlap import completion_mode, enabled
+            c["upload"]["completion_mode"] = completion_mode(c)
+            try:
+                pending = int(v["max_pending_batches"])
+                if not 1 <= pending <= 8:
+                    raise ValueError
+            except ValueError:
+                if enabled(c):
+                    raise ValueError("Maximum unfinished ingestion batches must be a whole number between 1 and 8.") from None
+                # A hidden, unfinished edit must not block a sequential or prepare-only run.
+                pending = self.project.config["lite"].get("max_pending_batches", 2)
+                self.vars["max_pending_batches"].set(str(pending))
+            c["lite"]["max_pending_batches"] = pending
             if not 1 <= c['cloud_upload']['concurrent_uploads'] <= 16:
                 raise ValueError('Concurrent Cloud transfers must be between 1 and 16.')
             if any(value < 1 for value in (c['download']['threads'],c['download']['batch_size'],c['extract']['workers'],c['mosaic']['workers'])):
@@ -278,7 +381,7 @@ class LiteApp:
             self.events.put(("plan",str(path)))
             self.emit("Manual batch prepared: "+str(path)+"; upload folder: gs://"+p.config["cloud_upload"]["bucket"]+"/"+prefix+"/")
             self.emit(json.dumps(result,default=str)[:800])
-        self.launch("Prepare manual upload batch",task)
+        self.launch("Prepare manual upload batch",task,cloud=True)
 
     def import_manual(self) -> None:
         path=Path(self.vars["manual_plan"].get())
@@ -290,7 +393,7 @@ class LiteApp:
                 finally:worker.report.write()
             self.emit(json.dumps(result,default=str))
             self.sync_locked(p)
-        self.launch("Import manual bucket batch",task)
+        self.launch("Import manual bucket batch",task,cloud=True)
 
     def sync_locked(self, project: object) -> None:
         with model.lite_lock(project.root):runner.sync_and_cleanup(project,self.emit)
@@ -302,7 +405,7 @@ class LiteApp:
                 result=main(["--config",str(runner.cloud_config_path(p)),"--yes"])
                 self.emit(f"Cloud upload returned {result}; pending/failed files are retained.")
                 runner.sync_and_cleanup(p,self.emit)
-        self.launch("Upload prepared local mosaics",task)
+        self.launch("Upload prepared local mosaics",task,cloud=True)
 
     def stats_context(self) -> tuple:
         """Reject delayed results after changing project or scientific scope."""
@@ -352,13 +455,21 @@ class LiteApp:
                 self.status.set("Complete Statistics exported to "+str(path))
             except OSError as exc:messagebox.showerror("Statistics export",str(exc),parent=self.root)
 
-    def launch(self, label: str, task: object, *, save: bool=True, needs_project: bool=True) -> None:
+    def launch(self, label: str, task: object, *, save: bool=True, needs_project: bool=True, cloud: bool=False) -> None:
         """Run an operation on frozen settings and report progress to the GUI."""
         if self.busy:return
         if needs_project and not self.project:
             messagebox.showinfo("Project required","Create or open a Lite project first.");return
+        if cloud:
+            error = project_id_error(self.vars["cloud_project"].get().strip(), self.vars["bucket"].get().strip())
+            if error:
+                self.notebook.select(self.cloud_page)
+                self.project_field.focus_set()
+                messagebox.showerror("Check Cloud settings", error, parent=self.root)
+                return
         if save and not self.save():return
         project=deepcopy(self.project);self.active_project=project;self.busy=True;self.stop.clear()
+        self.update_grouping_lock()
         for button in self.buttons:button.configure(state="disabled")
         self.status.set(label+" running…")
         def background() -> None:
@@ -389,6 +500,7 @@ class LiteApp:
                     self.log.configure(state="normal");self.log.insert("end",value+"\n");self.log.see("end");self.log.configure(state="disabled")
                     if kind in {"done","error"}:
                         self.busy=False;self.active_project=None;self.status.set(value)
+                        self.update_grouping_lock()
                         for button in self.buttons:button.configure(state="normal")
                         if kind=="error":messagebox.showerror("Operation needs attention",value)
                         if self.auto_statistics:self.refresh_statistics()

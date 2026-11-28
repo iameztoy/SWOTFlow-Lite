@@ -134,10 +134,13 @@ class LiteAppTests(unittest.TestCase):
         self.assertEqual(self.app.vars['tiles'].get(),before)
 
     def test_zone_view_shares_route_settings_and_saves_window_without_cloud_changes(self):
-        from swotflow_lite.grouping import HEMISPHERE, WINDOWS
+        from swotflow_lite.grouping import HEMISPHERE, WINDOWS, LABELS
         original=deepcopy(self.project.config)
-        self.assertEqual(str(self.app.zone_panel.compression_combo.cget("textvariable")), str(self.app.vars["compression"]))
-        self.app.zone_panel.activate()
+        self.assertFalse(self.app.zone_panel.winfo_manager())
+        self.app.vars["tiles"].set("UTM35L, UTM35M, UTM35P")
+        self.app.vars["grouping"].set(next(k for k, v in LABELS.items() if v == HEMISPHERE))
+        self.assertEqual(self.app.zone_panel.winfo_manager(), "grid")
+        self.assertEqual(len(self.app.zone_panel.tree.get_children()), 2)
         self.app.vars['zone_window'].set(next(k for k,v in WINDOWS.items() if v=='half_month'))
         self.app.mode.set('prepare')
         self.assertTrue(self.app.save())
@@ -149,21 +152,62 @@ class LiteAppTests(unittest.TestCase):
             self.assertEqual(restored.config[section],original[section])
         self.app.apply(restored)
         self.assertEqual(WINDOWS[self.app.vars['zone_window'].get()],'half_month')
-        self.assertIn('Process Zones',[self.app.notebook.tab(t,'text') for t in self.app.notebook.tabs()])
+        self.assertEqual([self.app.notebook.tab(t, "text") for t in self.app.notebook.tabs()],
+                         ["Project", "Process", "Cloud", "Statistics"])
 
-    def test_zone_actions_protect_existing_exact_plan_and_running_worker(self):
-        from swotflow_lite.grouping import EXACT
-        model.write_json(self.project.root/'00_logs/lite_plan.json',{'batches':[]})
-        with mock.patch('swotflow_lite.zone_ui.messagebox.showerror') as error:
-            self.app.zone_panel.activate()
-            self.assertEqual(error.call_count,1)
-        self.assertEqual(self.project.config['mosaic']['grouping_mode'],EXACT)
-        with mock.patch.object(self.app,'launch') as launch, mock.patch('swotflow_lite.zone_ui.messagebox.showerror'):
-            self.app.zone_panel.launch('Zone processing',lambda p:None)
-            launch.assert_not_called()
-            self.app.busy=True
-            self.app.zone_panel.launch('Zone processing',lambda p:None)
-            launch.assert_not_called()
+    def test_existing_plan_locks_grouping_and_keeps_window_setting(self):
+        from swotflow_lite.grouping import EXACT, HEMISPHERE, LABELS
+        model.write_json(self.project.root / "00_logs/lite_plan.json", {"batches": []})
+        self.app.apply(self.project)
+        self.assertTrue(self.app.grouping_combo.instate(["disabled"]))
+        self.app.vars["grouping"].set(next(k for k, v in LABELS.items() if v == HEMISPHERE))
+        with mock.patch("swotflow_lite.app.messagebox.showerror"):
+            self.assertFalse(self.app.save())
+        self.assertEqual(model.open_project(self.project.root).config["mosaic"]["grouping_mode"], EXACT)
+
+    def test_overlap_options_follow_route_without_erasing_saved_values(self):
+        self.app.mode.set("automatic")
+        self.app.overlap_ee.set(True)
+        self.app.vars["max_pending_batches"].set("3")
+        self.assertEqual(self.app.pending_options.winfo_manager(), "grid")
+        self.app.mode.set("prepare")
+        self.assertFalse(self.app.pending_options.winfo_manager())
+        self.assertFalse(self.app.overlap_control.winfo_manager())
+        self.assertTrue(self.app.save())
+        self.app.apply(model.open_project(self.project.root))
+        self.app.mode.set("automatic")
+        self.assertTrue(self.app.overlap_ee.get())
+        self.assertEqual(self.app.vars["max_pending_batches"].get(), "3")
+        self.assertEqual(self.app.pending_options.winfo_manager(), "grid")
+
+    def test_hidden_invalid_overlap_edit_reuses_saved_limit(self):
+        self.app.mode.set("automatic")
+        self.app.overlap_ee.set(True)
+        self.app.vars["max_pending_batches"].set("three")
+        with mock.patch("swotflow_lite.app.messagebox.showerror"):
+            self.assertFalse(self.app.save())
+        self.app.mode.set("prepare")
+        self.assertTrue(self.app.save())
+        self.assertEqual(self.app.vars["max_pending_batches"].get(), "2")
+        self.assertEqual(model.open_project(self.project.root).config["lite"]["max_pending_batches"], 2)
+
+    def test_bucket_in_project_field_flags_error_without_launching_cloud_work(self):
+        self.app.vars["bucket"].set("swot_hr100m")
+        for value in ("gs://swot_hr100m", "swot_hr100m"):
+            self.app.vars["cloud_project"].set(value)
+            self.assertIn("bucket", self.app.cloud_hint.get())
+            self.assertTrue(self.app.project_field.instate(["invalid"]))
+            with mock.patch("swotflow_lite.app.threading.Thread") as thread, mock.patch(
+                    "swotflow_lite.app.messagebox.showerror") as error:
+                self.app.launch("Sync", lambda p: None, cloud=True)
+                thread.assert_not_called()
+                error.assert_called_once()
+            self.assertEqual(self.app.notebook.select(), str(self.app.cloud_page))
+        self.assertTrue(self.app.save())  # local-only preparation can save incomplete Cloud details
+        self.app.vars["cloud_project"].set("shared-name")
+        self.app.vars["bucket"].set("shared-name")
+        self.assertIn("Confirm", self.app.cloud_hint.get())
+        self.assertFalse(self.app.project_field.instate(["invalid"]))
 
     def test_opening_engine_project_without_lite_marker_is_rejected(self):
         from swotflow.project.model import save_project

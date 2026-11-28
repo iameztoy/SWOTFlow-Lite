@@ -6,7 +6,7 @@ The selected quality pixel and its elevation stay paired. Original source select
 
 ## Controls
 
-Lite v0.4.2: **Process -> Mosaic compression** and **Process Zones -> Mosaic compression** edit one shared value. Both prepare-only/manual Cloud import and fully automatic mode use it. New Lite projects default to ZSTD; existing projects retain their saved setting (missing means Uncompressed).
+In Lite v0.5.1, choose **Mosaic compression** at the top of **Process** for either grouping. Both prepare-only/manual Cloud import and fully automatic mode use it. New Lite projects default to ZSTD; existing projects retain their saved setting (missing means Uncompressed).
 
 ## Existing projects and Resume
 

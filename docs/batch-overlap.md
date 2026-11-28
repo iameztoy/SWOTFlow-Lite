@@ -1,6 +1,6 @@
-# Batch overlap and worker tuning — v0.5.0
+# Batch overlap and worker tuning — v0.5.1
 
-In **Process**, select **Fully automatic** and optionally enable **Prepare the next batch while EE ingests the previous one**. The same controls apply to **Process Zones**. Existing projects default to sequential behavior. Manual preparation ignores this option.
+In **Process**, select **Fully automatic** and optionally enable **Prepare the next batch while EE ingests the previous one**. The same controls apply to tile and zone/hemisphere grouping. The unfinished-batch limit appears when overlap is enabled. Existing projects default to sequential behavior. Manual preparation ignores this option.
 
 One local batch is prepared at a time. Once its Cloud transfers have finished and ingestion task IDs are durably recorded, the app can prepare the next batch while EE works remotely. This overlaps remote ingestion with local preparation; it does not run two independent project controllers or start the next batch while the previous batch is still transferring bytes.
 

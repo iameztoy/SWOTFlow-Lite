@@ -4,6 +4,17 @@ import re
 
 BACKENDS = {"Browser (existing uploader)": "browser", "Google Cloud Storage": "gcs"}
 
+def project_id_error(project: str, bucket: str = "") -> str:
+    """Return an actionable message before a Cloud client uses the project ID."""
+    if re.fullmatch(r"[a-z][a-z0-9-]{4,61}[a-z0-9]", project):
+        return ""
+    if project and ("://" in project or "/" in project or project == bucket or "_" in project or "." in project):
+        return ("The Google Cloud project ID looks like a bucket or path. Enter the project ID "
+                "shown in Google Cloud Console (for example, hardy-tenure-383607). "
+                "Enter the bucket name in Bucket name (for example, swot_hr100m), without gs://.")
+    return "Enter the Google Cloud project ID from Cloud Console (for example, hardy-tenure-383607)."
+
+
 @dataclass(frozen=True)
 class CloudConfig:
     project: str = ""
@@ -23,8 +34,9 @@ class CloudConfig:
                    int(values.get("chunk_mib", 16)), int(values.get("concurrent_uploads", 1)))
 
     def validate(self):
-        if not re.fullmatch(r"[a-z][a-z0-9-]{4,61}[a-z0-9]", self.project):
-            raise ValueError("Cloud Upload: enter the Google Cloud project ID (not its display name).")
+        project_error = project_id_error(self.project, self.bucket)
+        if project_error:
+            raise ValueError(project_error)
         if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]", self.bucket):
             raise ValueError("Cloud Upload: enter a bucket name without gs:// or a folder path.")
         if not self.prefix or not re.fullmatch(r"[A-Za-z0-9/_-]+", self.prefix) or ".." in self.prefix:
